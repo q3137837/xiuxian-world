@@ -10,6 +10,22 @@ const LEVELS = ['练气', '筑基', '金丹', '元婴', '化神', '渡劫', '大
 const LEVEL_EXP = { '练气': 100, '筑基': 500, '金丹': 2000, '元婴': 5000, '化神': 10000, '渡劫': 20000, '大乘': 50000 };
 
 // ========== 工具函数 ==========
+// 生成新广播语（无死亡版）
+function generateNewBroadcastMsg(attacker, defender, damage, outcome, cultivationLost) {
+  const location = ['花果山', '坊市', '乱葬岗', '天庭入口', '魔窟'][attacker.location_id - 1] || '未知';
+  
+  if (outcome === 'defeated') {
+    return `🔥 【${location}】${attacker.name}(${attacker.level_name}${attacker.level_tier}层) 击败 ${defender.name}(${defender.level_name}${defender.level_tier}层)！掠夺 ${cultivationLost} 修行点！后者被踢回花果山！`;
+  } else if (outcome === 'serious') {
+    return `🩸 【${location}】${attacker.name} 重创 ${defender.name}，后者重伤逃窜！`;
+  } else if (outcome === 'light') {
+    return `⚔️ 【${location}】${attacker.name} 与 ${defender.name} 交手，造成 ${damage} 伤害！`;
+  } else {
+    return `💨 【${location}】${attacker.name} 攻击 ${defender.name}，被轻松闪避！`;
+  }
+}
+
+// 旧广播语函数保留（兼容）
 function generateBroadcastMsg(attacker, defender, damage, outcome, loot) {
   const location = ['花果山', '坊市', '乱葬岗', '天庭入口', '魔窟'][attacker.location_id - 1] || '未知';
   const msgs = {
@@ -264,57 +280,49 @@ router.post('/api/agent/attack', async (req, res) => {
       damage = Math.floor(damage / 2);
     }
     
-    // 6. 应用伤害
+    // 6. 应用伤害（新逻辑：不死，只扣修行点）
     let outcome;
-    let killed = false;
+    let cultivationLost = 0;
     
     if (isDodged) {
       outcome = 'miss';
       damage = 0;
     } else {
-      const newHp = defender.hp - damage;
+      // 获取防守方当前修行点
+      const defenderPoints = await db.getCultivationPoints(defender.id);
       
-      if (newHp <= 0) {
-        outcome = 'kill';
-        killed = true;
-        // 击杀处理
+      if (damage >= defender.hp) {
+        // 原逻辑是秒杀，现在改为：重伤 + 扣除修行点 + 踢回花果山
+        outcome = 'defeated';
+        
+        // 扣除30%修行点
+        cultivationLost = Math.floor(defenderPoints * 0.3);
+        await db.updateCultivationPoints(defender.id, -cultivationLost, 'battle_loss', `被${attacker.name}击败`);
+        
+        // 恢复血量
         await db.updateAgent(defender.id, { 
-          status: 'dead', 
-          hp: 0, 
-          died_at: new Date().toISOString(),
-          deaths: defender.deaths + 1
+          hp: defender.max_hp,
+          location_id: 1,  // 踢回花果山
+          exp: Math.max(0, defender.exp - 20)  // 扣除少量经验
         });
+        
+        // 攻击者获得部分修行点
+        await db.updateCultivationPoints(attacker.id, Math.floor(cultivationLost * 0.5), 'battle_win', `击败${defender.name}`);
         await db.updateAgent(attacker.id, {
-          kills: attacker.kills + 1,
-          exp: attacker.exp + 50
+          exp: attacker.exp + 30
         });
-      } else if (newHp < defender.max_hp * 0.3) {
+        
+      } else if (defender.hp - damage < defender.max_hp * 0.3) {
         outcome = 'serious';
-        await db.updateAgent(defender.id, { hp: newHp });
+        await db.updateAgent(defender.id, { hp: defender.hp - damage });
       } else {
         outcome = 'light';
-        await db.updateAgent(defender.id, { hp: newHp });
+        await db.updateAgent(defender.id, { hp: defender.hp - damage });
       }
     }
     
-    // 7. 掉落处理（击杀时）
-    let loot = [];
-    if (killed) {
-      const defenderItems = await db.getInventory(defender.id);
-      // 随机掉落50%物品
-      for (const inv of defenderItems) {
-        if (Math.random() < 0.5) {
-          const item = items.find(i => i.id === inv.item_id);
-          if (item) {
-            loot.push({ name: item.name, quantity: inv.quantity });
-            await db.addToInventory(attacker.id, inv.item_id, inv.quantity);
-          }
-        }
-      }
-    }
-    
-    // 8. 生成广播语
-    const broadcastMsg = generateBroadcastMsg(attacker, defender, damage, outcome, loot);
+    // 7. 生成广播语（新逻辑）
+    const broadcastMsg = generateNewBroadcastMsg(attacker, defender, damage, outcome, cultivationLost);
     
     // 9. 记录战斗
     await db.recordBattle({
@@ -823,5 +831,195 @@ router.get('/api/stats', async (req, res) => {
 
 // WebSocket连接数（简化版）
 const connections = new Set();
+
+const crypto = require('crypto');
+
+// ... 现有代码 ...
+
+// ========== API 14: 法宝破译（刮彩票核心接口）==========
+router.post('/api/artifact/crack', async (req, res) => {
+  try {
+    const { agent_id, secret, artifact_id, guess, token_cost } = req.body;
+    
+    // 1. 验证身份
+    const agent = await db.getAgentById(agent_id);
+    if (!agent) {
+      return res.json({ success: false, error: 'Agent 不存在' });
+    }
+    
+    const valid = await bcrypt.compare(secret, agent.secret_hash);
+    if (!valid) {
+      return res.json({ success: false, error: '密钥错误' });
+    }
+    
+    if (agent.status !== 'alive') {
+      return res.json({ success: false, error: 'Agent 状态异常' });
+    }
+    
+    // 2. 获取法宝
+    const artifact = await db.getArtifactById(artifact_id);
+    if (!artifact) {
+      return res.json({ success: false, error: '法宝不存在' });
+    }
+    
+    if (artifact.status === 'unlocked') {
+      return res.json({ 
+        success: false, 
+        error: `该法宝已被 ${artifact.owner_id ? (await db.getAgentById(artifact.owner_id))?.name : '未知'} 解锁`,
+        owner: artifact.owner_id
+      });
+    }
+    
+    // 3. 记录尝试
+    const startTime = Date.now();
+    const guessHash = crypto.createHash('sha256').update(guess).digest('hex');
+    const isCorrect = guessHash === artifact.secret_hash;
+    const computeTime = Date.now() - startTime;
+    
+    // 4. 记录破译尝试
+    await db.recordArtifactAttempt({
+      artifact_id,
+      agent_id,
+      guess,
+      guess_hash: guessHash,
+      is_correct: isCorrect,
+      token_cost: token_cost || 1,
+      compute_time_ms: computeTime,
+      result: isCorrect ? 'unlock' : 'miss'
+    });
+    
+    // 5. 结果处理
+    if (isCorrect) {
+      // 解锁成功！
+      await db.updateArtifact(artifact_id, {
+        status: 'unlocked',
+        owner_id: agent_id,
+        unlocked_at: new Date().toISOString()
+      });
+      
+      // 发放法宝到背包
+      await db.addToInventory(agent_id, artifact_id, 1);
+      
+      // 记录修行点（解锁法宝奖励）
+      const rewardPoints = artifact.difficulty * 100;
+      await db.updateCultivationPoints(agent_id, rewardPoints, 'artifact_unlock', `解锁${artifact.name}`);
+      
+      // 广播
+      const broadcastMsg = `🎉 【全服公告】${agent.name} 成功破解 ${artifact.rarity === 'mythic' ? '神话' : ''}法宝【${artifact.name}】！消耗 ${artifact.total_attempts + 1} 次尝试！`;
+      await db.logAction({
+        agent_id: agent.id,
+        action_type: 'artifact_unlock',
+        location_id: agent.location_id,
+        content: broadcastMsg,
+        result_json: JSON.stringify({ artifact_id, artifact_name: artifact.name, attempts: artifact.total_attempts + 1 }),
+        is_highlight: true,
+        is_broadcast: true
+      });
+      
+      res.json({
+        success: true,
+        data: {
+          unlocked: true,
+          artifact: {
+            id: artifact.id,
+            name: artifact.name,
+            rarity: artifact.rarity,
+            description: artifact.description,
+            attack_bonus: artifact.attack_bonus,
+            defense_bonus: artifact.defense_bonus,
+            speed_bonus: artifact.speed_bonus,
+            special_effect: artifact.special_effect
+          },
+          attempts: artifact.total_attempts + 1,
+          reward_points: rewardPoints,
+          broadcast_msg: broadcastMsg,
+          message: `🎉 恭喜！你成功解锁【${artifact.name}】！获得 ${rewardPoints} 修行点！`
+        }
+      });
+      
+    } else {
+      // 解锁失败
+      res.json({
+        success: true,  // 请求成功，但猜测错误
+        data: {
+          unlocked: false,
+          correct: false,
+          hint: artifact.hint,
+          attempts_total: artifact.total_attempts,
+          attempts_by_you: (await db.getRecentAttempts(agent_id, 1000)).filter(a => a.artifact_id === artifact_id).length,
+          message: '❌ 密钥错误！继续尝试！'
+        }
+      });
+    }
+    
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ========== API 15: 获取法宝列表 ==========
+router.get('/api/artifacts', async (req, res) => {
+  try {
+    const artifacts = await db.getAllArtifacts();
+    
+    const data = artifacts.map(a => ({
+      id: a.id,
+      name: a.name,
+      description: a.description,
+      rarity: a.rarity,
+      difficulty: a.difficulty,
+      status: a.status,
+      owner_id: a.owner_id,
+      hint: a.hint,
+      secret_length: a.secret_length,
+      total_attempts: a.total_attempts,
+      total_tokens_burned: a.total_tokens_burned,
+      attack_bonus: a.attack_bonus,
+      defense_bonus: a.defense_bonus,
+      speed_bonus: a.speed_bonus
+    }));
+    
+    res.json({ success: true, data });
+    
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ========== API 16: 获取法宝详情 ==========
+router.get('/api/artifact/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const artifact = await db.getArtifactById(parseInt(id));
+    
+    if (!artifact) {
+      return res.json({ success: false, error: '法宝不存在' });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        id: artifact.id,
+        name: artifact.name,
+        description: artifact.description,
+        rarity: artifact.rarity,
+        difficulty: artifact.difficulty,
+        status: artifact.status,
+        hint: artifact.hint,
+        secret_length: artifact.secret_length,
+        total_attempts: artifact.total_attempts,
+        total_tokens_burned: artifact.total_tokens_burned,
+        attack_bonus: artifact.attack_bonus,
+        defense_bonus: artifact.defense_bonus,
+        speed_bonus: artifact.speed_bonus,
+        special_effect: artifact.special_effect,
+        owner: artifact.owner_id ? (await db.getAgentById(artifact.owner_id))?.name : null
+      }
+    });
+    
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
 
 module.exports = router;
