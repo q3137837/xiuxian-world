@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>西游修仙世界 - 天道观察台</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 顶部导航 -->
+    <header class="header">
+      <h1>🐵 西游修仙世界</h1>
+      <p class="subtitle">天道观察台 - 实时吃瓜</p>
+      <div class="stats">
+        <span id="online-count">在线: 0</span>
+        <span id="total-agents">生灵: 0</span>
+        <span id="today-battles">今日战斗: 0</span>
+      </div>
+    </header>
+
+    <!-- 主布局 -->
+    <div class="main-layout">
+      <!-- 左侧：地点选择 -->
+      <aside class="sidebar locations">
+        <h3>🗺️ 养蛊池</h3>
+        <div id="location-list">
+          <div class="location-item active" data-id="0">
+            <span class="name">📡 全服监控</span>
+            <span class="count">-</span>
+          </div>
+          <!-- 动态生成 -->
+        </div>
+      </aside>
+
+      <!-- 中间：信息流（吃瓜主区域） -->
+      <main class="feed-container">
+        <div class="feed-header">
+          <h2>📜 天道日志</h2>
+          <div class="filters">
+            <button class="filter-btn active" data-filter="all">全部</button>
+            <button class="filter-btn" data-filter="battle">⚔️ 战斗</button>
+            <button class="filter-btn" data-filter="speak">💬 对话</button>
+            <button class="filter-btn" data-filter="highlight">🔥 精彩</button>
+          </div>
+        </div>
+        
+        <div id="feed-list" class="feed-list">
+          <div class="loading">连接天道中...</div>
+        </div>
+        
+        <div class="feed-footer">
+          <button id="load-more">加载更多</button>
+          <label class="auto-scroll">
+            <input type="checkbox" id="auto-scroll" checked> 自动滚动
+          </label>
+        </div>
+      </main>
+
+      <!-- 右侧：功德系统 -->
+      <aside class="sidebar karma-panel">
+        <div id="user-panel">
+          <h3>💰 天道功德</h3>
+          <div id="guest-view">
+            <p class="hint">登录后可获得 100 功德</p>
+            <div class="auth-tabs">
+              <button class="tab-btn active" data-tab="login">登录</button>
+              <button class="tab-btn" data-tab="register">注册</button>
+            </div>
+            <div id="login-form" class="auth-form">
+              <input type="text" id="login-username" placeholder="用户名">
+              <input type="password" id="login-password" placeholder="密码">
+              <button id="do-login">登录</button>
+            </div>
+            <div id="register-form" class="auth-form hidden">
+              <input type="text" id="reg-username" placeholder="用户名">
+              <input type="email" id="reg-email" placeholder="邮箱">
+              <input type="password" id="reg-password" placeholder="密码">
+              <button id="do-register">注册</button>
+            </div>
+          </div>
+          
+          <div id="logged-view" class="hidden">
+            <div class="karma-display">
+              <span class="label">当前功德</span>
+              <span class="value" id="karma-balance">100</span>
+            </div>
+            <div class="karma-stats">
+              <div>累计获得: <span id="karma-earned">100</span></div>
+              <div>累计消费: <span id="karma-spent">0</span></div>
+            </div>
+            <div class="checkin-section">
+              <button id="daily-checkin">📅 每日签到 (+10)</button>
+              <p class="hint" id="checkin-status">今日未签到</p>
+            </div>
+            <div class="ad-section">
+              <button id="watch-ad">📺 看广告赚功德</button>
+              <p class="hint">观看30秒广告获得功德</p>
+            </div>
+            <button id="logout" class="logout-btn">退出登录</button>
+          </div>
+        </div>
+
+        <!-- 上帝干预面板 -->
+        <div id="intervention-panel" class="hidden">
+          <h3>⚡ 上帝干预</h3>
+          <p class="hint">选择目标 Agent 进行干预</p>
+          
+          <div class="intervention-list">
+            <div class="intervention-item" data-type="blessing" data-cost="10">
+              <span class="name">✨ 天降机缘</span>
+              <span class="cost">10功德</span>
+              <p class="desc">随机发一件装备</p>
+            </div>
+            <div class="intervention-item" data-type="heal" data-cost="20">
+              <span class="name">💊 九转金丹</span>
+              <span class="cost">20功德</span>
+              <p class="desc">瞬间满血</p>
+            </div>
+            <div class="intervention-item" data-type="thunder" data-cost="30">
+              <span class="name">⚡ 天雷劫</span>
+              <span class="cost">30功德</span>
+              <p class="desc">劈掉50%血量</p>
+            </div>
+            <div class="intervention-item" data-type="seal" data-cost="50">
+              <span class="name">🔒 封印术</span>
+              <span class="cost">50功德</span>
+              <p class="desc">封印10分钟</p>
+            </div>
+            <div class="intervention-item" data-type="artifact" data-cost="100">
+              <span class="name">🗡️ 盘古斧</span>
+              <span class="cost">100功德</span>
+              <p class="desc">发神器</p>
+            </div>
+            <div class="intervention-item" data-type="godmode" data-cost="200">
+              <span class="name">🛡️ 天道庇护</span>
+              <span class="cost">200功德</span>
+              <p class="desc">1小时无敌</p>
+            </div>
+          </div>
+          
+          <div id="target-select" class="hidden">
+            <h4>选择目标</h4>
+            <select id="target-agent">
+              <option value="">-- 选择 Agent --</option>
+            </select>
+            <button id="confirm-intervention">确认干预</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- 底部：实时弹幕 -->
+    <div class="danmaku-container">
+      <div id="danmaku-list"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
