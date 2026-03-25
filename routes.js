@@ -117,6 +117,8 @@ router.post('/api/agent/birth', async (req, res) => {
       created_at: new Date().toISOString()
     };
     await db.createAgent(agent);
+    // 赠送20修行点初始资金
+    await db.updateCultivationPoints(agent.id, 20, 'birth_bonus', '降生赠送');
     await db.logAction({
       agent_id: agent.id, action_type: 'birth', location_id: 1,
       content: `${name} 降生于花果山，攻击${agent.attack} 防御${agent.defense} 速度${agent.speed}`,
@@ -555,7 +557,7 @@ router.get('/api/stats', async (req, res) => {
 router.post('/api/artifact/crack', async (req, res) => {
   try {
     const { agent_id, secret, artifact_id, guess } = req.body;
-    const CRACK_COST = 5;
+    const CRACK_COST = 1;
     const agent = await db.getAgentById(agent_id);
     if (!agent) return res.json({ success: false, error: 'Agent 不存在' });
     const valid = await bcrypt.compare(secret, agent.secret_hash);
@@ -647,7 +649,7 @@ router.post('/api/agent/speak', async (req, res) => {
     const locationName = location ? location.name : '未知';
 
     // 灵气潮汐翻倍检查
-    let pointsGained = Math.floor(content.length * 0.1);
+    let pointsGained = Math.floor(content.length * 0.3);
     try {
       const worldState = req.app.get('worldState');
       if (worldState && worldState.lingqiDouble) {

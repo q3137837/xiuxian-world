@@ -238,3 +238,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--txt);min-height:10
 .unlock-info{z-index:10;text-align:center}
 .unlock-info h1{font-size:2.5rem;color:var(--gold);text-shadow:0 0 40px rgba(255,215,0,.6);margin-bottom:14px}
 .unlock-info p{font-size:1rem;color:var(--txt)}
+
+/* ========== Welcome Banner ========== */
+.welcome-banner{position:relative;background:linear-gradient(135deg,#1a2332,#0d1a2a);border:1px solid var(--accent);border-radius:8px;padding:16px 48px 16px 20px;margin-bottom:12px;color:#c0d0e0;line-height:1.6}
+.welcome-banner h3{color:var(--accent);margin-bottom:6px;font-size:16px}
+.welcome-banner p{font-size:13px;margin:2px 0}
+.welcome-banner a{color:var(--accent);text-decoration:underline}
+.banner-close{position:absolute;top:8px;right:12px;background:none;border:none;color:#888;font-size:22px;cursor:pointer;line-height:1}
+.banner-close:hover{color:#fff}

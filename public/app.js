@@ -130,18 +130,28 @@ function matchFilter(type, filter) {
 
 function feedHTML(item) {
   const hl = item.is_highlight ? ' highlight' : '';
-  const time = new Date(item.time).toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  const time = relativeTime(item.time);
+  const emoji = { birth:'🌟', speak:'💬', attack:'⚔️', defeated:'⚔️', artifact_unlock:'🎉', world_event:'⚡', technique_create:'📜', technique_buy:'📜', move:'🚶', intervention:'✨' }[item.action_type] || '📌';
   return `<div class="feed-item type-${item.action_type}${hl}">
     <div class="feed-time">${time} · ${item.location} · ${item.agent_name}</div>
-    <div class="feed-content">${hl ? highlight(item.content) : escapeHtml(item.content)}</div>
+    <div class="feed-content">${emoji} ${hl ? highlight(item.content) : escapeHtml(item.content)}</div>
   </div>`;
+}
+
+function relativeTime(ts) {
+  const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (diff < 10) return '刚刚';
+  if (diff < 60) return diff + '秒前';
+  if (diff < 3600) return Math.floor(diff / 60) + '分钟前';
+  if (diff < 86400) return Math.floor(diff / 3600) + '小时前';
+  return Math.floor(diff / 86400) + '天前';
 }
 
 function prependFeedRaw(msg) {
   const container = $('feed-list');
   const div = document.createElement('div');
   div.className = 'feed-item type-speak';
-  div.innerHTML = `<div class="feed-time">${new Date().toLocaleTimeString('zh-CN')}</div><div class="feed-content">${escapeHtml(msg)}</div>`;
+  div.innerHTML = `<div class="feed-time">刚刚</div><div class="feed-content">💬 ${escapeHtml(msg)}</div>`;
   container.prepend(div);
   if (container.children.length > 80) container.lastChild.remove();
 }
