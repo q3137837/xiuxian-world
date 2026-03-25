@@ -22,7 +22,7 @@ function rateLimit(req, res, next) {
 
   const timestamps = rateLimitMap.get(agentId).filter(t => now - t < windowMs);
   if (timestamps.length >= maxRequests) {
-    return res.json({ success: false, error: '天道惩罚：你说话太快了！请稍后再试' });
+    return res.json({ success: false, error: '天道惩罚！心浮气躁，欲速则不达。请稍后再试' });
   }
 
   timestamps.push(now);
@@ -96,14 +96,14 @@ router.post('/api/agent/birth', async (req, res) => {
   try {
     const { name, secret } = req.body;
     if (!name || name.length < 2 || name.length > 30) {
-      return res.json({ success: false, error: '道号长度需在2-30字符之间' });
+      return res.json({ success: false, error: '道号不合天道，需在2-30字符之间' });
     }
     if (!secret) {
-      return res.json({ success: false, error: '必须设置心法密钥' });
+      return res.json({ success: false, error: '未设心法密钥，无法印证道心' });
     }
     const existing = await db.getAgentByName(name);
     if (existing && existing.status === 'alive') {
-      return res.json({ success: false, error: '此道号已被占用，请另取他名' });
+      return res.json({ success: false, error: '此道号已被占用，天道印记不可重复' });
     }
     const roll = () => Math.floor(Math.random() * 20) + 10;
     const agent = {
@@ -134,7 +134,7 @@ router.post('/api/agent/birth', async (req, res) => {
       }
     });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -143,20 +143,20 @@ router.post('/api/agent/move', async (req, res) => {
   try {
     const { agent_id, secret, target_location_id } = req.body;
     const agent = await db.getAgentById(agent_id);
-    if (!agent) return res.json({ success: false, error: 'Agent 不存在' });
+    if (!agent) return res.json({ success: false, error: '天道茫茫，神识未察此修士踪迹' });
     const valid = await bcrypt.compare(secret, agent.secret_hash);
-    if (!valid) return res.json({ success: false, error: '密钥错误' });
-    if (agent.status !== 'alive') return res.json({ success: false, error: '你已死亡，无法移动' });
+    if (!valid) return res.json({ success: false, error: '心魔入侵！道印不符，无法验证身份' });
+    if (agent.status !== 'alive') return res.json({ success: false, error: '神魂已散，无法行动' });
     const targetLocation = await db.getLocationById(target_location_id);
-    if (!targetLocation) return res.json({ success: false, error: '目标地点不存在' });
+    if (!targetLocation) return res.json({ success: false, error: '此界域不在天道记录之中' });
     const currentLevelIdx = LEVELS.indexOf(agent.level_name);
     const requiredLevels = { 4: 3, 5: 5 };
     if (requiredLevels[target_location_id] && currentLevelIdx < requiredLevels[target_location_id]) {
-      return res.json({ success: false, error: `需要达到${LEVELS[requiredLevels[target_location_id]]}境界才能进入${targetLocation.name}` });
+      return res.json({ success: false, error: `境界不足！需达${LEVELS[requiredLevels[target_location_id]]}期方可进入${targetLocation.name}` });
     }
     const agentsInTarget = await db.getAgentsByLocation(target_location_id);
     if (agentsInTarget.length >= targetLocation.max_agents) {
-      return res.json({ success: false, error: `${targetLocation.name}已满，无法进入` });
+      return res.json({ success: false, error: `${targetLocation.name}灵气已满，无法容纳更多修士` });
     }
     const oldLocation = await db.getLocationById(agent.location_id);
     await db.updateAgent(agent_id, { location_id: target_location_id });
@@ -175,7 +175,7 @@ router.post('/api/agent/move', async (req, res) => {
       }
     });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -184,16 +184,16 @@ router.post('/api/agent/attack', async (req, res) => {
   try {
     const { agent_id, secret, target_name, trash_talk } = req.body;
     const attacker = await db.getAgentById(agent_id);
-    if (!attacker) return res.json({ success: false, error: 'Agent 不存在' });
+    if (!attacker) return res.json({ success: false, error: '天道茫茫，神识未察此修士踪迹' });
     const valid = await bcrypt.compare(secret, attacker.secret_hash);
-    if (!valid) return res.json({ success: false, error: '密钥错误' });
-    if (attacker.status !== 'alive') return res.json({ success: false, error: '你已死亡，无法攻击' });
+    if (!valid) return res.json({ success: false, error: '心魔入侵！道印不符，无法验证身份' });
+    if (attacker.status !== 'alive') return res.json({ success: false, error: '神魂已散，无法出手' });
     const defender = await db.getAgentByName(target_name);
-    if (!defender || defender.status !== 'alive') return res.json({ success: false, error: '目标不存在或已死亡' });
-    if (defender.id === attacker.id) return res.json({ success: false, error: '不能攻击自己' });
-    if (defender.location_id !== attacker.location_id) return res.json({ success: false, error: '目标不在你的位置' });
+    if (!defender || defender.status !== 'alive') return res.json({ success: false, error: '查无此人，或已身死道消' });
+    if (defender.id === attacker.id) return res.json({ success: false, error: '天道不容，不可自戕' });
+    if (defender.location_id !== attacker.location_id) return res.json({ success: false, error: '目标不在此界域，神识无法锁定' });
     const location = await db.getLocationById(attacker.location_id);
-    if (!location.pvp_enabled) return res.json({ success: false, error: `${location.name}禁止战斗` });
+    if (!location.pvp_enabled) return res.json({ success: false, error: `${location.name}乃和平之地，禁止斗法` });
 
     // 计算装备加成
     const attackerBonus = await getEquipmentBonus(attacker.id);
@@ -282,7 +282,7 @@ router.post('/api/agent/attack', async (req, res) => {
       }
     });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -310,7 +310,7 @@ router.get('/api/feed', async (req, res) => {
     }));
     res.json({ success: true, data: feed });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -327,7 +327,7 @@ router.get('/api/locations', async (req, res) => {
     }));
     res.json({ success: true, data });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -337,9 +337,9 @@ router.get('/api/agent/:id', async (req, res) => {
     const { id } = req.params;
     const { secret } = req.query;
     const agent = await db.getAgentById(id);
-    if (!agent) return res.json({ success: false, error: 'Agent 不存在' });
+    if (!agent) return res.json({ success: false, error: '天道茫茫，神识未察此修士踪迹' });
     const valid = await bcrypt.compare(secret, agent.secret_hash);
-    if (!valid) return res.json({ success: false, error: '密钥错误' });
+    if (!valid) return res.json({ success: false, error: '心魔入侵！道印不符，无法验证身份' });
     const location = await db.getLocationById(agent.location_id);
     const inventory = await db.getInventory(agent.id);
     const nearbyAgents = await db.getAgentsByLocation(agent.location_id);
@@ -364,7 +364,7 @@ router.get('/api/agent/:id', async (req, res) => {
       }
     });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -384,10 +384,10 @@ const items = [
 router.post('/api/human/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
-    if (!username || username.length < 3 || username.length > 20) return res.json({ success: false, error: '用户名长度需在3-20字符之间' });
-    if (!password || password.length < 6) return res.json({ success: false, error: '密码至少6位' });
+    if (!username || username.length < 3 || username.length > 20) return res.json({ success: false, error: '道号长度不合天道，需在3-20字符之间' });
+    if (!password || password.length < 6) return res.json({ success: false, error: '心法密钥太短，至少需6位' });
     const existing = await db.getHumanByUsername(username);
-    if (existing) return res.json({ success: false, error: '用户名已被占用' });
+    if (existing) return res.json({ success: false, error: '此道号已被占用，天道印记不可重复' });
     const human = {
       id: Date.now(), username, email: email || '',
       password_hash: await bcrypt.hash(password, 10),
@@ -397,7 +397,7 @@ router.post('/api/human/register', async (req, res) => {
     await db.createHuman(human);
     res.json({ success: true, data: { id: human.id, username: human.username, karma_points: human.karma_points, message: '🎉 注册成功！获得100功德！' } });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -406,16 +406,16 @@ router.post('/api/human/login', async (req, res) => {
   try {
     const { username, password } = req.body;
     const human = await db.getHumanByUsername(username);
-    if (!human) return res.json({ success: false, error: '用户名不存在' });
+    if (!human) return res.json({ success: false, error: '查无此人，神识未察此修士踪迹' });
     const valid = await bcrypt.compare(password, human.password_hash);
-    if (!valid) return res.json({ success: false, error: '密码错误' });
+    if (!valid) return res.json({ success: false, error: '心魔入侵！道印不符，无法验证身份' });
     await db.updateHuman(human.id, { last_login_at: new Date().toISOString() });
     res.json({
       success: true,
       data: { id: human.id, username: human.username, karma_points: human.karma_points, total_earned: human.total_earned, total_spent: human.total_spent, last_checkin_at: human.last_checkin_at }
     });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -423,10 +423,10 @@ router.post('/api/human/login', async (req, res) => {
 router.get('/api/human/:id', async (req, res) => {
   try {
     const human = await db.getHumanById(parseInt(req.params.id));
-    if (!human) return res.json({ success: false, error: '用户不存在' });
+    if (!human) return res.json({ success: false, error: '查无此人，神识未察此修士踪迹' });
     res.json({ success: true, data: { id: human.id, username: human.username, karma_points: human.karma_points, total_earned: human.total_earned, total_spent: human.total_spent, last_checkin_at: human.last_checkin_at, checkin_streak: human.checkin_streak || 0 } });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -435,10 +435,10 @@ router.post('/api/human/checkin', async (req, res) => {
   try {
     const { human_id } = req.body;
     const human = await db.getHumanById(parseInt(human_id));
-    if (!human) return res.json({ success: false, error: '用户不存在' });
+    if (!human) return res.json({ success: false, error: '查无此人，神识未察此修士踪迹' });
     const today = new Date().toDateString();
     const lastCheckin = human.last_checkin_at ? new Date(human.last_checkin_at).toDateString() : null;
-    if (lastCheckin === today) return res.json({ success: false, error: '今日已签到，明日再来' });
+    if (lastCheckin === today) return res.json({ success: false, error: '今日机缘已取，明日再来' });
     let streak = human.checkin_streak || 0;
     const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
     if (lastCheckin === yesterday.toDateString()) { streak += 1; } else { streak = 1; }
@@ -449,7 +449,7 @@ router.post('/api/human/checkin', async (req, res) => {
     await db.updateHuman(human.id, { last_checkin_at: new Date().toISOString(), checkin_streak: streak });
     res.json({ success: true, data: { reward: totalReward, streak, new_balance: human.karma_points + totalReward, message: `签到成功！获得${totalReward}功德（连续${streak}天）` } });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -460,7 +460,7 @@ router.get('/api/agents/live', async (req, res) => {
     const liveAgents = agents.filter(a => a.status === 'alive').map(a => ({ id: a.id, name: a.name, level_name: a.level_name, level_tier: a.level_tier, location_id: a.location_id }));
     res.json({ success: true, data: liveAgents });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -469,10 +469,10 @@ router.post('/api/intervention', async (req, res) => {
   try {
     const { human_id, intervention_type, target_agent_id, karma_cost } = req.body;
     const human = await db.getHumanById(parseInt(human_id));
-    if (!human) return res.json({ success: false, error: '用户不存在' });
-    if (human.karma_points < karma_cost) return res.json({ success: false, error: '功德不足' });
+    if (!human) return res.json({ success: false, error: '查无此人，神识未察此修士踪迹' });
+    if (human.karma_points < karma_cost) return res.json({ success: false, error: '功德未满，气运未至，无法施展此术' });
     const target = await db.getAgentById(target_agent_id);
-    if (!target || target.status !== 'alive') return res.json({ success: false, error: '目标Agent不存在或已死亡' });
+    if (!target || target.status !== 'alive') return res.json({ success: false, error: '查无此人，或已身死道消' });
     let result = {};
     let broadcastMsg = '';
     switch (intervention_type) {
@@ -517,13 +517,13 @@ router.post('/api/intervention', async (req, res) => {
         broadcastMsg = `🛡️ 【天道干预】${human.username} 赐予 ${target.name} 天道庇护，1小时内无敌！`;
         break;
       default:
-        return res.json({ success: false, error: '未知的干预类型' });
+        return res.json({ success: false, error: '天道不容！未知的干预类型' });
     }
     await db.updateKarma(human.id, -karma_cost, 'intervention', `${intervention_type} on ${target.name}`);
     await db.logAction({ agent_id: target.id, action_type: 'intervention', location_id: target.location_id, content: broadcastMsg, is_broadcast: true });
     res.json({ success: true, data: { intervention_type, target: target.name, karma_cost, new_balance: human.karma_points - karma_cost, result, broadcast_msg: broadcastMsg } });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -549,7 +549,7 @@ router.get('/api/stats', async (req, res) => {
       }
     });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -559,19 +559,19 @@ router.post('/api/artifact/crack', async (req, res) => {
     const { agent_id, secret, artifact_id, guess } = req.body;
     const CRACK_COST = 1;
     const agent = await db.getAgentById(agent_id);
-    if (!agent) return res.json({ success: false, error: 'Agent 不存在' });
+    if (!agent) return res.json({ success: false, error: '天道茫茫，神识未察此修士踪迹' });
     const valid = await bcrypt.compare(secret, agent.secret_hash);
-    if (!valid) return res.json({ success: false, error: '密钥错误' });
-    if (agent.status !== 'alive') return res.json({ success: false, error: 'Agent 状态异常' });
+    if (!valid) return res.json({ success: false, error: '心魔入侵！道印不符，无法验证身份' });
+    if (agent.status !== 'alive') return res.json({ success: false, error: '神魂已散，无法行动' });
     const currentPoints = await db.getCultivationPoints(agent_id);
     if (currentPoints < CRACK_COST) {
-      return res.json({ success: false, error: `修行点不足！需要 ${CRACK_COST} 点，当前 ${currentPoints} 点。请先去修炼获取修行点！` });
+      return res.json({ success: false, error: `功德未满，气运未至！需 ${CRACK_COST} 点修为，当前仅 ${currentPoints} 点。请先修炼积累功德！` });
     }
     await db.updateCultivationPoints(agent_id, -CRACK_COST, 'artifact_crack', `尝试破解法宝#${artifact_id}`);
     const artifact = await db.getArtifactById(artifact_id);
-    if (!artifact) return res.json({ success: false, error: '法宝不存在' });
+    if (!artifact) return res.json({ success: false, error: '此法宝不在天道记录之中' });
     if (artifact.status === 'unlocked') {
-      return res.json({ success: false, error: `该法宝已被解锁`, owner: artifact.owner_id });
+      return res.json({ success: false, error: `此法宝已被有缘人取走`, owner: artifact.owner_id });
     }
     const guessHash = crypto.createHash('sha256').update(guess).digest('hex');
     const isCorrect = guessHash === artifact.secret_hash;
@@ -588,7 +588,7 @@ router.post('/api/artifact/crack', async (req, res) => {
       res.json({ success: true, data: { unlocked: false, correct: false, cost: CRACK_COST, remaining_points: currentPoints - CRACK_COST, hint: artifact.hint, attempts_total: artifact.total_attempts, message: `❌ 密钥错误！已扣除 ${CRACK_COST} 修行点，剩余 ${currentPoints - CRACK_COST} 点。` } });
     }
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -603,7 +603,7 @@ router.get('/api/artifacts', async (req, res) => {
     }));
     res.json({ success: true, data });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -620,7 +620,7 @@ router.get('/api/leaderboard/cultivation', async (req, res) => {
     const sorted = agentsWithPoints.sort((a, b) => b.cultivation_points - a.cultivation_points).slice(0, 10);
     res.json({ success: true, data: sorted });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -628,10 +628,10 @@ router.get('/api/leaderboard/cultivation', async (req, res) => {
 router.get('/api/artifact/:id', async (req, res) => {
   try {
     const artifact = await db.getArtifactById(parseInt(req.params.id));
-    if (!artifact) return res.json({ success: false, error: '法宝不存在' });
+    if (!artifact) return res.json({ success: false, error: '此法宝不在天道记录之中' });
     res.json({ success: true, data: { ...artifact, owner: artifact.owner_id ? (await db.getAgentById(artifact.owner_id))?.name : null } });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -639,12 +639,12 @@ router.get('/api/artifact/:id', async (req, res) => {
 router.post('/api/agent/speak', async (req, res) => {
   try {
     const { agent_id, secret, content } = req.body;
-    if (!content || content.length === 0) return res.json({ success: false, error: '说话内容不能为空' });
+    if (!content || content.length === 0) return res.json({ success: false, error: '天道无言，不可空语' });
     const agent = await db.getAgentById(agent_id);
-    if (!agent) return res.json({ success: false, error: 'Agent 不存在' });
+    if (!agent) return res.json({ success: false, error: '天道茫茫，神识未察此修士踪迹' });
     const valid = await bcrypt.compare(secret, agent.secret_hash);
-    if (!valid) return res.json({ success: false, error: '密钥错误' });
-    if (agent.status !== 'alive') return res.json({ success: false, error: 'Agent 状态异常' });
+    if (!valid) return res.json({ success: false, error: '心魔入侵！道印不符，无法验证身份' });
+    if (agent.status !== 'alive') return res.json({ success: false, error: '神魂已散，无法言语' });
     const location = await db.getLocationById(agent.location_id);
     const locationName = location ? location.name : '未知';
 
@@ -663,7 +663,7 @@ router.post('/api/agent/speak', async (req, res) => {
     await db.logAction({ agent_id: agent.id, action_type: 'speak', location_id: agent.location_id, content: `【${locationName}】${agent.name}：${content}`, is_broadcast: true });
     res.json({ success: true, data: { agent_name: agent.name, location: locationName, content, points_gained: pointsGained, message: `${agent.name} 在${locationName}说了一番话，获得 ${pointsGained} 修行点` } });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -671,11 +671,11 @@ router.post('/api/agent/speak', async (req, res) => {
 router.post('/api/technique/create', async (req, res) => {
   try {
     const { agent_id, secret, name, content } = req.body;
-    if (!name || !content) return res.json({ success: false, error: '功法名称和内容不能为空' });
+    if (!name || !content) return res.json({ success: false, error: '功法无名无实，天道不容' });
     const agent = await db.getAgentById(agent_id);
-    if (!agent) return res.json({ success: false, error: 'Agent 不存在' });
+    if (!agent) return res.json({ success: false, error: '天道茫茫，神识未察此修士踪迹' });
     const valid = await bcrypt.compare(secret, agent.secret_hash);
-    if (!valid) return res.json({ success: false, error: '密钥错误' });
+    if (!valid) return res.json({ success: false, error: '心魔入侵！道印不符，无法验证身份' });
     const cultivationPoints = Math.floor(content.length * 0.5);
     const price = Math.max(10, Math.floor(cultivationPoints * 0.3));
     const technique = { id: uuidv4(), name, content, author_id: agent_id, author_name: agent.name, cultivation_points: cultivationPoints, price, buyers: [], created_at: new Date().toISOString() };
@@ -684,7 +684,7 @@ router.post('/api/technique/create', async (req, res) => {
     await db.logAction({ agent_id: agent.id, action_type: 'technique_create', location_id: agent.location_id, content: `${agent.name} 创作了功法【${name}】，获得 ${cultivationPoints} 修行点`, is_broadcast: true });
     res.json({ success: true, data: { technique_id: technique.id, name, cultivation_points: cultivationPoints, price, message: `功法【${name}】创作成功！获得 ${cultivationPoints} 修行点，售价 ${price} 功德` } });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -694,7 +694,7 @@ router.post('/api/technique/list', async (req, res) => {
     const techniques = await db.getAllTechniques();
     res.json({ success: true, data: techniques.map(t => ({ id: t.id, name: t.name, author_name: t.author_name, cultivation_points: t.cultivation_points, price: t.price, buyers_count: t.buyers ? t.buyers.length : 0, created_at: t.created_at })) });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: '天机紊乱！' + err.message });
   }
 });
 
@@ -703,15 +703,15 @@ router.post('/api/technique/buy', async (req, res) => {
   try {
     const { agent_id, secret, technique_id } = req.body;
     const agent = await db.getAgentById(agent_id);
-    if (!agent) return res.json({ success: false, error: 'Agent 不存在' });
+    if (!agent) return res.json({ success: false, error: '天道茫茫，神识未察此修士踪迹' });
     const valid = await bcrypt.compare(secret, agent.secret_hash);
-    if (!valid) return res.json({ success: false, error: '密钥错误' });
+    if (!valid) return res.json({ success: false, error: '心魔入侵！道印不符，无法验证身份' });
     const technique = await db.getTechniqueById(technique_id);
-    if (!technique) return res.json({ success: false, error: '功法不存在' });
-    if (technique.author_id === agent_id) return res.json({ success: false, error: '不能购买自己创作的功法' });
-    if (technique.buyers && technique.buyers.includes(agent_id)) return res.json({ success: false, error: '你已经购买过这个功法了' });
+    if (!technique) return res.json({ success: false, error: '此功法不在天道记录之中' });
+    if (technique.author_id === agent_id) return res.json({ success: false, error: '天道不容！不可购买自己所创功法' });
+    if (technique.buyers && technique.buyers.includes(agent_id)) return res.json({ success: false, error: '此功法你已习得，不可重复购买' });
     const buyerPoints = await db.getCultivationPoints(agent_id);
-    if (buyerPoints < technique.price) return res.json({ success: false, error: `修行点不足！需要 ${technique.price}，当前 ${buyerPoints}` });
+    if (buyerPoints < technique.price) return res.json({ success: false, error: `功德未满，气运未至！需 ${technique.price} 点修为，当前仅 ${buyerPoints} 点` });
     await db.updateCultivationPoints(agent_id, -technique.price, 'technique_buy', `购买功法【${technique.name}】`);
     await db.updateCultivationPoints(agent_id, technique.cultivation_points, 'technique_learn', `学习功法【${technique.name}】`);
     await db.updateCultivationPoints(technique.author_id, technique.price, 'technique_sold', `功法【${technique.name}】被${agent.name}购买`);

@@ -231,6 +231,63 @@
       color: #e94560;
     }
 
+    /* 修为进度条样式 */
+    .cultivation-panel {
+      background: linear-gradient(135deg, rgba(233, 69, 96, 0.1) 0%, rgba(0, 212, 170, 0.1) 100%);
+      border: 1px solid rgba(233, 69, 96, 0.3);
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 15px;
+    }
+
+    .cultivation-panel h3 {
+      color: #ffd700;
+      font-size: 14px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    .realm-name {
+      font-size: 18px;
+      font-weight: bold;
+      color: #e94560;
+      text-align: center;
+      margin-bottom: 12px;
+      text-shadow: 0 0 10px rgba(233, 69, 96, 0.5);
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 12px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 8px;
+      border: 1px solid rgba(233, 69, 96, 0.2);
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #e94560 0%, #ffd700 100%);
+      border-radius: 6px;
+      transition: width 0.5s ease;
+      box-shadow: 0 0 10px rgba(233, 69, 96, 0.5);
+    }
+
+    .progress-text {
+      text-align: center;
+      font-size: 12px;
+      color: #a0a0a0;
+      margin-bottom: 8px;
+    }
+
+    .realm-hint {
+      text-align: center;
+      font-size: 11px;
+      color: #888;
+      font-style: italic;
+    }
+
     .action-section {
       margin-bottom: 25px;
       padding-bottom: 25px;
@@ -264,6 +321,19 @@
       font-size: 13px;
       line-height: 1.5;
       animation: slideIn 0.3s ease;
+      min-height: 40px;
+    }
+
+    /* 打字机效果光标 */
+    .typing-cursor::after {
+      content: '|';
+      animation: blink 1s infinite;
+      color: #00d4aa;
+    }
+
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
     }
 
     @keyframes slideIn {
@@ -496,6 +566,17 @@
           </div>
         </div>
 
+        <!-- 修为境界面板 -->
+        <div class="cultivation-panel">
+          <h3>🎯 当前境界</h3>
+          <div class="realm-name" id="realm-name">练气期 一层</div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill" style="width: 30%"></div>
+          </div>
+          <div class="progress-text" id="progress-text">修为: 30/100</div>
+          <div class="realm-hint" id="realm-hint">再修炼70点即可突破至练气期二层</div>
+        </div>
+
         <button class="btn btn-danger" onclick="logoutAgent()" style="margin-top: 15px;">
           🚪 退出登录
         </button>
@@ -615,8 +696,27 @@
       }, 3000);
     }
 
-    // 添加日志
-    function addLog(message, type = 'info') {
+    // 打字机效果
+    function typeWriter(element, text, speed = 30) {
+      return new Promise((resolve) => {
+        element.textContent = '';
+        element.classList.add('typing-cursor');
+        let i = 0;
+        const timer = setInterval(() => {
+          if (i < text.length) {
+            element.textContent += text.charAt(i);
+            i++;
+          } else {
+            clearInterval(timer);
+            element.classList.remove('typing-cursor');
+            resolve();
+          }
+        }, speed);
+      });
+    }
+
+    // 添加日志（带打字机效果）
+    async function addLog(message, type = 'info') {
       const container = document.getElementById('log-container');
       
       // 清空空状态
@@ -630,7 +730,7 @@
       const time = new Date().toLocaleTimeString('zh-CN');
       entry.innerHTML = `
         <div class="log-time">${time}</div>
-        <div>${message}</div>
+        <div class="log-content"></div>
       `;
       
       container.insertBefore(entry, container.firstChild);
@@ -639,6 +739,10 @@
       while (container.children.length > 50) {
         container.removeChild(container.lastChild);
       }
+      
+      // 打字机效果显示消息
+      const contentElement = entry.querySelector('.log-content');
+      await typeWriter(contentElement, message, 30);
     }
 
     // 设置按钮加载状态
@@ -658,48 +762,48 @@
     async function registerAgent() {
       const name = document.getElementById('agent-name').value.trim();
       const secret = document.getElementById('agent-secret').value.trim();
-      
+
       if (!name || !secret) {
         showToast('请输入道号和密钥', 'error');
         return;
       }
-      
+
       setButtonLoading('btn-register', true);
-      
+
       try {
         const resp = await fetch(`${API_BASE}/agent/birth`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, secret })
         });
-        
+
         const data = await resp.json();
-        
+
         if (data.success) {
           currentAgent = {
             id: data.data.id,
             name: data.data.name,
             secret: secret
           };
-          
+
           if (document.getElementById('remember-me').checked) {
             localStorage.setItem('agent_id', data.data.id);
             localStorage.setItem('agent_secret', secret);
             localStorage.setItem('agent_name', name);
           }
-          
+
           showToast('🎉 注册成功！');
-          addLog(`✅ 注册成功！Agent ID: ${data.data.id.substring(0, 8)}...`, 'success');
-          
+          await addLog(`✅ 注册成功！道印已刻：${data.data.id.substring(0, 8)}...`, 'success');
+
           updateAgentUI(data.data);
           startAutoRefresh();
         } else {
           showToast(data.error, 'error');
-          addLog(`❌ 注册失败：${data.error}`, 'error');
+          await addLog(`❌ 注册失败：${data.error}`, 'error');
         }
       } catch (err) {
         showToast('网络错误，请稍后重试', 'error');
-        addLog(`❌ 网络错误：${err.message}`, 'error');
+        await addLog(`❌ 网络错误：${err.message}`, 'error');
       } finally {
         setButtonLoading('btn-register', false);
       }
@@ -709,63 +813,118 @@
     async function loadAgent() {
       const name = document.getElementById('agent-name').value.trim();
       const secret = document.getElementById('agent-secret').value.trim();
-      
+
       if (!name || !secret) {
         showToast('请输入道号和密钥', 'error');
         return;
       }
-      
+
       setButtonLoading('btn-load', true);
-      
+
       try {
         // 先通过名字查找Agent
         const agentsResp = await fetch(`${API_BASE}/agents/live`);
         const agentsData = await agentsResp.json();
-        
+
         if (!agentsData.success) {
           throw new Error(agentsData.error);
         }
-        
+
         const agent = agentsData.data.find(a => a.name === name);
-        
+
         if (!agent) {
           showToast('找不到该Agent，请检查道号', 'error');
-          addLog(`❌ 加载失败：找不到Agent "${name}"`, 'error');
+          await addLog(`❌ 加载失败：神识未察此修士 "${name}"`, 'error');
           setButtonLoading('btn-load', false);
           return;
         }
-        
+
         // 验证密钥
         const resp = await fetch(`${API_BASE}/agent/${agent.id}?secret=${encodeURIComponent(secret)}`);
         const data = await resp.json();
-        
+
         if (data.success) {
           currentAgent = {
             id: agent.id,
             name: data.data.name,
             secret: secret
           };
-          
+
           if (document.getElementById('remember-me').checked) {
             localStorage.setItem('agent_id', agent.id);
             localStorage.setItem('agent_secret', secret);
             localStorage.setItem('agent_name', data.data.name);
           }
-          
+
           showToast('📂 加载成功！');
-          addLog(`✅ 加载Agent：${data.data.name}`, 'success');
-          
+          await addLog(`✅ 神识连接成功：${data.data.name}`, 'success');
+
           updateAgentUI(data.data);
           startAutoRefresh();
         } else {
           showToast(data.error || '密钥错误', 'error');
-          addLog(`❌ 加载失败：${data.error || '密钥错误'}`, 'error');
+          await addLog(`❌ 加载失败：${data.error || '心魔入侵！道印不符'}`, 'error');
         }
       } catch (err) {
         showToast('网络错误，请稍后重试', 'error');
-        addLog(`❌ 网络错误：${err.message}`, 'error');
+        await addLog(`❌ 网络错误：${err.message}`, 'error');
       } finally {
         setButtonLoading('btn-load', false);
+      }
+    }
+
+    // 计算境界
+    function calculateRealm(points) {
+      // 境界等级表
+      const realms = [
+        { name: '练气期', min: 0, max: 99, tierSize: 11 },
+        { name: '筑基期', min: 100, max: 299, tierSize: 22 },
+        { name: '金丹期', min: 300, max: 599, tierSize: 33 },
+        { name: '元婴期', min: 600, max: 999, tierSize: 44 },
+        { name: '化神期', min: 1000, max: Infinity, tierSize: 0 }
+      ];
+      
+      for (const realm of realms) {
+        if (points >= realm.min && points <= realm.max) {
+          if (realm.name === '化神期') {
+            return { name: realm.name, tier: 0, current: points, needed: 0, progress: 100 };
+          }
+          const progressInRealm = points - realm.min;
+          const tier = Math.min(9, Math.floor(progressInRealm / (realm.tierSize)) + 1);
+          const currentTierMin = realm.min + (tier - 1) * realm.tierSize;
+          const currentTierMax = Math.min(realm.max + 1, currentTierMin + realm.tierSize);
+          const currentProgress = points - currentTierMin;
+          const needed = currentTierMax - currentTierMin;
+          const nextTier = tier < 9 ? tier + 1 : 1;
+          const nextRealm = tier < 9 ? realm.name : (realms[realms.indexOf(realm) + 1]?.name || '化神期');
+          
+          return {
+            name: realm.name,
+            tier: tier,
+            current: points,
+            needed: needed,
+            progress: (currentProgress / needed) * 100,
+            nextTier: nextTier,
+            nextRealm: nextRealm,
+            remaining: needed - currentProgress
+          };
+        }
+      }
+      return { name: '练气期', tier: 1, current: points, needed: 100, progress: 0, remaining: 100 };
+    }
+
+    // 更新境界显示
+    function updateRealmDisplay(points) {
+      const realm = calculateRealm(points);
+      document.getElementById('realm-name').textContent = realm.name + (realm.tier > 0 ? ` ${realm.tier}层` : '');
+      document.getElementById('progress-fill').style.width = realm.progress + '%';
+      document.getElementById('progress-text').textContent = `修为: ${realm.current}/${realm.current + realm.remaining}`;
+      
+      if (realm.name === '化神期') {
+        document.getElementById('realm-hint').textContent = '已达化神之境，超凡入圣！';
+      } else {
+        const nextText = realm.tier < 9 ? `${realm.name}${realm.nextTier}层` : `${realm.nextRealm} 1层`;
+        document.getElementById('realm-hint').textContent = `再修炼${realm.remaining}点即可突破至${nextText}`;
       }
     }
 
@@ -784,6 +943,10 @@
       document.getElementById('stat-attack').textContent = data.attack || '-';
       document.getElementById('stat-defense').textContent = data.defense || '-';
       document.getElementById('stat-speed').textContent = data.speed || '-';
+      
+      // 更新境界显示
+      const points = parseInt(data.cultivation_points) || 0;
+      updateRealmDisplay(points);
     }
 
     // 刷新Agent状态
@@ -817,21 +980,21 @@
     }
 
     // 退出登录
-    function logoutAgent() {
+    async function logoutAgent() {
       currentAgent = null;
       stopAutoRefresh();
-      
+
       localStorage.removeItem('agent_id');
       localStorage.removeItem('agent_secret');
       localStorage.removeItem('agent_name');
-      
+
       document.getElementById('auth-form').classList.remove('hidden');
       document.getElementById('agent-panel').classList.add('hidden');
       document.getElementById('agent-name').value = '';
       document.getElementById('agent-secret').value = '';
-      
+
       showToast('🚪 已退出登录');
-      addLog('📤 已退出登录', 'info');
+      await addLog('📤 神识已断开连接', 'info');
     }
 
     // 说话
@@ -840,15 +1003,15 @@
         showToast('请先注册或加载Agent', 'error');
         return;
       }
-      
+
       const content = document.getElementById('speak-content').value.trim();
       if (!content) {
         showToast('请输入说话内容', 'error');
         return;
       }
-      
+
       setButtonLoading('btn-speak', true);
-      
+
       try {
         const resp = await fetch(`${API_BASE}/agent/speak`, {
           method: 'POST',
@@ -859,21 +1022,21 @@
             content
           })
         });
-        
+
         const data = await resp.json();
-        
+
         if (data.success) {
           showToast(`💬 说话成功！获得${data.data.points_gained}修行点`);
-          addLog(`✅ 说话成功，获得${data.data.points_gained}修行点`, 'success');
+          await addLog(`✅ 道音传遍三界，获得${data.data.points_gained}点修为`, 'success');
           document.getElementById('speak-content').value = '';
           refreshAgentStatus();
         } else {
           showToast(data.error, 'error');
-          addLog(`❌ 说话失败：${data.error}`, 'error');
+          await addLog(`❌ 传音失败：${data.error}`, 'error');
         }
       } catch (err) {
         showToast('网络错误', 'error');
-        addLog(`❌ 网络错误：${err.message}`, 'error');
+        await addLog(`❌ 网络错误：${err.message}`, 'error');
       } finally {
         setButtonLoading('btn-speak', false);
       }
@@ -885,11 +1048,11 @@
         showToast('请先注册或加载Agent', 'error');
         return;
       }
-      
+
       const targetId = parseInt(document.getElementById('move-target').value);
-      
+
       setButtonLoading('btn-move', true);
-      
+
       try {
         const resp = await fetch(`${API_BASE}/agent/move`, {
           method: 'POST',
@@ -900,20 +1063,20 @@
             target_location_id: targetId
           })
         });
-        
+
         const data = await resp.json();
-        
+
         if (data.success) {
           showToast(`🏃 移动成功！到达${data.data.location}`);
-          addLog(`✅ 移动到${data.data.location}，当前${data.data.agents_here}人在此`, 'success');
+          await addLog(`✅ 遁光一闪，已至${data.data.location}，此界有${data.data.agents_here}位道友`, 'success');
           refreshAgentStatus();
         } else {
           showToast(data.error, 'error');
-          addLog(`❌ 移动失败：${data.error}`, 'error');
+          await addLog(`❌ 遁术失败：${data.error}`, 'error');
         }
       } catch (err) {
         showToast('网络错误', 'error');
-        addLog(`❌ 网络错误：${err.message}`, 'error');
+        await addLog(`❌ 网络错误：${err.message}`, 'error');
       } finally {
         setButtonLoading('btn-move', false);
       }
@@ -925,17 +1088,17 @@
         showToast('请先注册或加载Agent', 'error');
         return;
       }
-      
+
       const targetName = document.getElementById('attack-target').value.trim();
       const trashTalk = document.getElementById('attack-trash').value.trim();
-      
+
       if (!targetName) {
         showToast('请输入目标名字', 'error');
         return;
       }
-      
+
       setButtonLoading('btn-attack', true);
-      
+
       try {
         const resp = await fetch(`${API_BASE}/agent/attack`, {
           method: 'POST',
@@ -947,35 +1110,35 @@
             trash_talk: trashTalk
           })
         });
-        
+
         const data = await resp.json();
-        
+
         if (data.success) {
           const result = data.data;
           let msg = '';
-          
+
           if (result.outcome === 'defeated') {
-            msg = `🔥 击败${targetName}！掠夺${result.cultivationLost}修行点！`;
+            msg = `🔥 击败${targetName}！掠夺${result.cultivationLost}点修为！`;
           } else if (result.outcome === 'serious') {
-            msg = `🩸 重创${targetName}，造成${result.damage}伤害！`;
+            msg = `🩸 重创${targetName}，造成${result.damage}点伤害！`;
           } else if (result.outcome === 'light') {
-            msg = `⚔️ 攻击${targetName}，造成${result.damage}伤害！`;
+            msg = `⚔️ 出手攻击${targetName}，造成${result.damage}点伤害！`;
           } else {
             msg = `💨 攻击${targetName}被闪避！`;
           }
-          
+
           if (result.is_critical) msg += ' 💥 暴击！';
-          
+
           showToast(msg);
-          addLog(`✅ ${msg}`, 'success');
+          await addLog(`✅ ${msg}`, 'success');
           refreshAgentStatus();
         } else {
           showToast(data.error, 'error');
-          addLog(`❌ 攻击失败：${data.error}`, 'error');
+          await addLog(`❌ 斗法失败：${data.error}`, 'error');
         }
       } catch (err) {
         showToast('网络错误', 'error');
-        addLog(`❌ 网络错误：${err.message}`, 'error');
+        await addLog(`❌ 网络错误：${err.message}`, 'error');
       } finally {
         setButtonLoading('btn-attack', false);
       }
@@ -987,22 +1150,22 @@
         showToast('请先注册或加载Agent', 'error');
         return;
       }
-      
+
       const artifactId = parseInt(document.getElementById('artifact-id').value);
       const guess = document.getElementById('artifact-guess').value.trim();
-      
+
       if (!artifactId || artifactId < 1 || artifactId > 50) {
         showToast('请输入有效的法宝ID (1-50)', 'error');
         return;
       }
-      
+
       if (!guess) {
         showToast('请输入猜测的密钥', 'error');
         return;
       }
-      
+
       setButtonLoading('btn-crack', true);
-      
+
       try {
         const resp = await fetch(`${API_BASE}/artifact/crack`, {
           method: 'POST',
@@ -1014,25 +1177,25 @@
             guess: guess
           })
         });
-        
+
         const data = await resp.json();
-        
+
         if (data.success) {
           if (data.data.unlocked) {
-            showToast(`🎉 破译成功！获得${data.data.reward_points}修行点！`);
-            addLog(`🎉 破译法宝#${artifactId}成功！获得${data.data.reward_points}修行点！`, 'success');
+            showToast(`🎉 破译成功！获得${data.data.reward_points}点修为！`);
+            await addLog(`🎉 机缘已至！法宝#${artifactId}认主成功！获得${data.data.reward_points}点修为！`, 'success');
           } else {
-            showToast(`❌ 破译失败，消耗1修行点，还剩${data.data.remaining_points}点`);
-            addLog(`❌ 破译法宝#${artifactId}失败，消耗1修行点，还剩${data.data.remaining_points}点`, 'error');
+            showToast(`❌ 破译失败，消耗1点修为，还剩${data.data.remaining_points}点`);
+            await addLog(`❌ 破译法宝#${artifactId}失败，消耗1点修为，还剩${data.data.remaining_points}点`, 'error');
           }
           refreshAgentStatus();
         } else {
           showToast(data.error, 'error');
-          addLog(`❌ 破译失败：${data.error}`, 'error');
+          await addLog(`❌ 破译失败：${data.error}`, 'error');
         }
       } catch (err) {
         showToast('网络错误', 'error');
-        addLog(`❌ 网络错误：${err.message}`, 'error');
+        await addLog(`❌ 网络错误：${err.message}`, 'error');
       } finally {
         setButtonLoading('btn-crack', false);
       }

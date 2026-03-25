@@ -7,6 +7,10 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const routes = require('./routes');
 
+// 环境变量配置
+const PORT = process.env.PORT || 3003;
+const DATA_PATH = process.env.DATA_PATH || path.join(__dirname, 'data');
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -338,7 +342,6 @@ setInterval(async () => {
   }
 }, 30000);
 
-const PORT = process.env.PORT || 3003;
 server.listen(PORT, () => {
   console.log(`🐵 西游修仙世界 - 天道裁判所启动于端口 ${PORT}`);
   console.log(`📡 API地址: http://localhost:${PORT}/api/`);
