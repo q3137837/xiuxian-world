@@ -6,6 +6,9 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const routes = require('./routes');
+const { AgentBrain, PERSONALITIES } = require('./agent-brain');
+const { EventBus, EVENTS } = require('./event-bus');
+const { PlayerSystem } = require('./player-system');
 
 // 环境变量配置
 const PORT = process.env.PORT || 3003;
@@ -23,6 +26,12 @@ const worldState = {
   lingqiDouble: false,    // 灵气潮汐：修炼翻倍
   dangerBoost: 0,         // 乱葬岗临时危险加成
 };
+
+// 事件总线
+const eventBus = new EventBus();
+
+// 玩家系统
+const playerSystem = new PlayerSystem(db, eventBus);
 
 // 初始化数据库
 db.init().then(async () => {
@@ -189,9 +198,10 @@ async function seedData() {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 把 worldState 和 broadcast 挂到 app 上，让 routes 可以访问
+// 把 worldState、broadcast 和 eventBus 挂到 app 上，让 routes 可以访问
 app.set('worldState', worldState);
 app.set('broadcast', broadcast);
+app.set('eventBus', eventBus);
 
 // API路由
 app.use(routes);
@@ -342,6 +352,92 @@ setInterval(async () => {
   }
 }, 30000);
 
+// ========== Agent 自主运行调度 ==========
+let autoRunEnabled = true;
+let autoRunInterval = null;
+
+// Agent决策循环
+async function runAgentDecisionCycle() {
+  if (!autoRunEnabled) return;
+
+  try {
+    const agents = await db.getAllAgents();
+    const aliveAgents = agents.filter(a => a.status === 'alive');
+
+    // 随机打乱顺序，避免总是同一个Agent先行动
+    const shuffled = aliveAgents.sort(() => Math.random() - 0.5);
+
+    for (const agent of shuffled) {
+      // 检查是否被封印
+      if (agent.status === 'sealed' && agent.sealed_until) {
+        if (new Date(agent.sealed_until) > new Date()) {
+          continue; // 还在封印中
+        } else {
+          // 解封
+          await db.updateAgent(agent.id, { status: 'alive', sealed_until: null });
+          await db.logAction({
+            agent_id: agent.id,
+            action_type: 'unseal',
+            location_id: agent.location_id,
+            content: `🔓 ${agent.name}的封印解除，重获自由！`,
+            is_broadcast: true
+          });
+        }
+      }
+
+      // 创建Agent大脑并做决策
+      const brain = new AgentBrain(agent, db, eventBus);
+      await brain.makeDecision();
+
+      // 更新最后行动时间
+      await db.updateAgent(agent.id, { last_action_at: new Date().toISOString() });
+
+      // 小延迟，避免太快
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  } catch (err) {
+    console.error('Agent决策循环出错:', err);
+  }
+}
+
+// 启动自动运行（每30秒一次决策循环）
+function startAutoRun() {
+  if (autoRunInterval) clearInterval(autoRunInterval);
+  autoRunInterval = setInterval(runAgentDecisionCycle, 30000);
+  console.log('🤖 Agent自主运行已启动（每30秒决策一次）');
+}
+
+// 停止自动运行
+function stopAutoRun() {
+  if (autoRunInterval) {
+    clearInterval(autoRunInterval);
+    autoRunInterval = null;
+  }
+  autoRunEnabled = false;
+  console.log('🛑 Agent自主运行已停止');
+}
+
+// 事件监听
+eventBus.on(EVENTS.AGENT_BIRTH, (data) => {
+  console.log(`🌟 新Agent降生: ${data.agent_name}`);
+});
+
+eventBus.on(EVENTS.AGENT_DEATH, (data) => {
+  console.log(`💀 Agent陨落: ${data.agent_name}`);
+});
+
+eventBus.on(EVENTS.BATTLE_WIN, (data) => {
+  broadcast(`⚔️ ${data.winner} 击败了 ${data.loser}`);
+});
+
+eventBus.on(EVENTS.DIVINE_BLESSING, (data) => {
+  console.log(`🌟 天降机缘: Player ${data.player_id} 给 Agent ${data.agent_id} 送了 ${data.amount} 修为`);
+});
+
+eventBus.on(EVENTS.DIVINE_PUNISHMENT, (data) => {
+  console.log(`⚡ 天谴降临: Player ${data.player_id} 对 Agent ${data.agent_id} 降下${data.severity}雷劫`);
+});
+
 server.listen(PORT, () => {
   console.log(`🐵 西游修仙世界 - 天道裁判所启动于端口 ${PORT}`);
   console.log(`📡 API地址: http://localhost:${PORT}/api/`);
@@ -349,11 +445,20 @@ server.listen(PORT, () => {
   console.log(`📖 API文档: http://localhost:${PORT}/docs`);
   console.log('');
   console.log('可用API:');
-  console.log('  POST /api/agent/birth    - Agent降生');
-  console.log('  POST /api/agent/move     - Agent移动');
-  console.log('  POST /api/agent/attack   - Agent攻击');
-  console.log('  GET  /api/feed           - 信息流（吃瓜）');
-  console.log('  GET  /api/locations      - 地点列表');
-  console.log('  GET  /api/agent/:id      - Agent状态');
-  console.log('  GET  /docs               - API文档');
+  console.log('  POST /api/agent/birth       - Agent降生');
+  console.log('  POST /api/agent/move        - Agent移动');
+  console.log('  POST /api/agent/attack      - Agent攻击');
+  console.log('  GET  /api/feed              - 信息流（吃瓜）');
+  console.log('  GET  /api/locations         - 地点列表');
+  console.log('  GET  /api/agent/:id         - Agent状态');
+  console.log('  GET  /api/personalities     - 人格类型');
+  console.log('  GET  /api/world-chat        - 世界频道');
+  console.log('  GET  /api/bounties          - 悬赏列表');
+  console.log('  POST /api/god/blessing      - 天降机缘（上帝）');
+  console.log('  POST /api/god/punishment    - 九霄雷劫（上帝）');
+  console.log('  GET  /docs                  - API文档');
+  console.log('');
+
+  // 启动Agent自主运行
+  startAutoRun();
 });

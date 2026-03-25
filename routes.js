@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const path = require('path');
 const db = require('./database');
+const { parseTechnique, getEffectsDescription } = require('./technique-parser');
 
 const router = express.Router();
 
@@ -614,7 +615,7 @@ router.get('/api/leaderboard/cultivation', async (req, res) => {
     const agentsWithPoints = await Promise.all(
       agents.filter(a => a.status === 'alive').map(async (agent) => {
         const points = await db.getCultivationPoints(agent.id);
-        return { id: agent.id, name: agent.name, level_name: agent.level_name, level_tier: agent.level_tier, cultivation_points: points, total_tokens_burned: 0 };
+        return { id: agent.id, name: agent.name, level_name: agent.level_name, level_tier: agent.level_tier, personality: agent.personality, cultivation_points: points, total_tokens_burned: 0 };
       })
     );
     const sorted = agentsWithPoints.sort((a, b) => b.cultivation_points - a.cultivation_points).slice(0, 10);
@@ -731,6 +732,315 @@ router.get('/docs', (req, res) => {
 // ========== Agent控制台路由 ==========
 router.get('/console', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'console.html'));
+});
+
+// ========== API: 获取Agent人格类型 ==========
+router.get('/api/personalities', async (req, res) => {
+  try {
+    const { PERSONALITIES } = require('./agent-brain');
+    const data = Object.entries(PERSONALITIES).map(([key, p]) => ({
+      key,
+      name: p.name,
+      desc: p.desc,
+      traits: p.traits,
+      behaviors: p.behaviors,
+      risk_tolerance: p.risk_tolerance
+    }));
+    res.json({ success: true, data });
+  } catch (err) {
+    res.json({ success: false, error: '天机紊乱！' + err.message });
+  }
+});
+
+// ========== API: 获取Agent社交关系 ==========
+router.get('/api/agent/:id/relations', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const relations = await db.getRelations(id);
+    const data = await Promise.all(relations.map(async (r) => {
+      const otherId = r.agent_a === id ? r.agent_b : r.agent_a;
+      const other = await db.getAgentById(otherId);
+      return {
+        id: r.id,
+        type: r.type,
+        score: r.score,
+        other_agent: other ? { id: other.id, name: other.name, level: `${other.level_name}${other.level_tier}层` } : null,
+        history: r.history,
+        bounty: r.bounty
+      };
+    }));
+    res.json({ success: true, data });
+  } catch (err) {
+    res.json({ success: false, error: '天机紊乱！' + err.message });
+  }
+});
+
+// ========== API: 世界频道 ==========
+router.get('/api/world-chat', async (req, res) => {
+  try {
+    const { limit = 50 } = req.query;
+    const chats = await db.getWorldChat(parseInt(limit));
+    const data = await Promise.all(chats.map(async (chat) => {
+      const agent = await db.getAgentById(chat.agent_id);
+      return {
+        id: chat.id,
+        agent_name: agent ? agent.name : '未知',
+        agent_personality: agent ? agent.personality : null,
+        content: chat.content,
+        type: chat.type,
+        likes: chat.likes,
+        timestamp: chat.timestamp
+      };
+    }));
+    res.json({ success: true, data });
+  } catch (err) {
+    res.json({ success: false, error: '天机紊乱！' + err.message });
+  }
+});
+
+router.post('/api/world-chat', async (req, res) => {
+  try {
+    const { agent_id, secret, content, type = 'chat' } = req.body;
+    const agent = await db.getAgentById(agent_id);
+    if (!agent) return res.json({ success: false, error: '天道茫茫，神识未察此修士踪迹' });
+    const valid = await bcrypt.compare(secret, agent.secret_hash);
+    if (!valid) return res.json({ success: false, error: '心魔入侵！道印不符，无法验证身份' });
+
+    await db.createWorldChat({ agent_id, content, type });
+    await db.logAction({
+      agent_id: agent.id,
+      action_type: 'world_chat',
+      location_id: agent.location_id,
+      content: `【世界】${agent.name}：${content}`,
+      is_broadcast: true
+    });
+
+    res.json({ success: true, message: '发言成功' });
+  } catch (err) {
+    res.json({ success: false, error: '天机紊乱！' + err.message });
+  }
+});
+
+// ========== API: 悬赏系统 ==========
+router.get('/api/bounties', async (req, res) => {
+  try {
+    const bounties = await db.getActiveBounties();
+    const data = await Promise.all(bounties.map(async (b) => {
+      const poster = await db.getAgentById(b.poster_id);
+      const target = await db.getAgentById(b.target_id);
+      return {
+        id: b.id,
+        poster: poster ? { id: poster.id, name: poster.name } : null,
+        target: target ? { id: target.id, name: target.name } : null,
+        amount: b.amount,
+        created_at: b.created_at
+      };
+    }));
+    res.json({ success: true, data });
+  } catch (err) {
+    res.json({ success: false, error: '天机紊乱！' + err.message });
+  }
+});
+
+router.post('/api/bounty', async (req, res) => {
+  try {
+    const { agent_id, secret, target_name, amount } = req.body;
+    const agent = await db.getAgentById(agent_id);
+    if (!agent) return res.json({ success: false, error: '天道茫茫，神识未察此修士踪迹' });
+    const valid = await bcrypt.compare(secret, agent.secret_hash);
+    if (!valid) return res.json({ success: false, error: '心魔入侵！道印不符，无法验证身份' });
+
+    const target = await db.getAgentByName(target_name);
+    if (!target) return res.json({ success: false, error: '目标不存在' });
+
+    const points = await db.getCultivationPoints(agent_id);
+    if (points < amount) return res.json({ success: false, error: `功德未满！需${amount}修为，当前仅${points}点` });
+
+    await db.updateCultivationPoints(agent_id, -amount, 'bounty_post', `发布对${target.name}的悬赏`);
+
+    const bounty = {
+      id: uuidv4(),
+      poster_id: agent_id,
+      target_id: target.id,
+      amount,
+      status: 'active',
+      created_at: new Date().toISOString()
+    };
+    await db.createBounty(bounty);
+
+    const broadcastMsg = `💰 【悬赏】${agent.name}悬赏${amount}功德，取${target.name}项上人头！`;
+    await db.logAction({
+      agent_id: agent.id,
+      action_type: 'bounty',
+      location_id: agent.location_id,
+      content: broadcastMsg,
+      is_broadcast: true,
+      is_highlight: true
+    });
+
+    res.json({ success: true, message: broadcastMsg });
+  } catch (err) {
+    res.json({ success: false, error: '天机紊乱！' + err.message });
+  }
+});
+
+// ========== API: 功法效果解析 ==========
+router.get('/api/technique/:id/effects', async (req, res) => {
+  try {
+    const technique = await db.getTechniqueById(req.params.id);
+    if (!technique) return res.json({ success: false, error: '此功法不在天道记录之中' });
+
+    const effects = parseTechnique(technique.content);
+    res.json({
+      success: true,
+      data: {
+        technique_id: technique.id,
+        technique_name: technique.name,
+        effects,
+        description: getEffectsDescription(effects)
+      }
+    });
+  } catch (err) {
+    res.json({ success: false, error: '天机紊乱！' + err.message });
+  }
+});
+
+// ========== API: 玩家上帝干预（新） ==========
+router.post('/api/god/blessing', async (req, res) => {
+  try {
+    const { player_id, agent_id, amount } = req.body;
+    const { PlayerSystem } = require('./player-system');
+    const playerSystem = new PlayerSystem(db, req.app.get('eventBus'));
+    const result = await playerSystem.divineBlessing(player_id, agent_id, amount);
+    res.json(result);
+  } catch (err) {
+    res.json({ success: false, error: '天机紊乱！' + err.message });
+  }
+});
+
+router.post('/api/god/punishment', async (req, res) => {
+  try {
+    const { player_id, agent_id, severity } = req.body;
+    const { PlayerSystem } = require('./player-system');
+    const playerSystem = new PlayerSystem(db, req.app.get('eventBus'));
+    const result = await playerSystem.divinePunishment(player_id, agent_id, severity);
+    res.json(result);
+  } catch (err) {
+    res.json({ success: false, error: '天机紊乱！' + err.message });
+  }
+});
+
+router.post('/api/god/heal', async (req, res) => {
+  try {
+    const { player_id, agent_id } = req.body;
+    const { PlayerSystem } = require('./player-system');
+    const playerSystem = new PlayerSystem(db, req.app.get('eventBus'));
+    const result = await playerSystem.divineHeal(player_id, agent_id);
+    res.json(result);
+  } catch (err) {
+    res.json({ success: false, error: '天机紊乱！' + err.message });
+  }
+});
+
+router.post('/api/god/seal', async (req, res) => {
+  try {
+    const { player_id, agent_id, duration } = req.body;
+    const { PlayerSystem } = require('./player-system');
+    const playerSystem = new PlayerSystem(db, req.app.get('eventBus'));
+    const result = await playerSystem.divineSeal(player_id, agent_id, duration);
+    res.json(result);
+  } catch (err) {
+    res.json({ success: false, error: '天机紊乱！' + err.message });
+  }
+});
+
+// ========== API: 获取Agent详细信息（含人格、功法效果） ==========
+router.get('/api/agent/:id/details', async (req, res) => {
+  try {
+    const agent = await db.getAgentById(req.params.id);
+    if (!agent) return res.json({ success: false, error: '天道茫茫，神识未察此修士踪迹' });
+
+    const [points, location, inventory, techniques, relations] = await Promise.all([
+      db.getCultivationPoints(agent.id),
+      db.getLocationById(agent.location_id),
+      db.getInventory(agent.id),
+      db.getAgentTechniques(agent.id),
+      db.getRelations(agent.id)
+    ]);
+
+    // 解析功法效果
+    const techniqueEffects = techniques.map(t => ({
+      ...t,
+      effects: parseTechnique(t.content),
+      effects_desc: getEffectsDescription(parseTechnique(t.content))
+    }));
+
+    // 计算总效果
+    const totalEffects = {
+      attack_bonus: 0,
+      defense_bonus: 0,
+      speed_bonus: 0,
+      crit_chance: 0,
+      dodge_chance: 0,
+      life_steal: 0
+    };
+
+    for (const t of techniqueEffects) {
+      for (const e of t.effects) {
+        if (e.type === 'attack_bonus') totalEffects.attack_bonus += e.value;
+        if (e.type === 'defense_bonus') totalEffects.defense_bonus += e.value;
+        if (e.type === 'speed_bonus') totalEffects.speed_bonus += e.value;
+        if (e.type === 'crit_bonus') totalEffects.crit_chance += e.value;
+        if (e.type === 'dodge_chance') totalEffects.dodge_chance += e.value;
+        if (e.type === 'life_steal') totalEffects.life_steal += e.value;
+      }
+    }
+
+    const { PERSONALITIES } = require('./agent-brain');
+    const personality = PERSONALITIES[agent.personality || 'CASUAL'];
+
+    res.json({
+      success: true,
+      data: {
+        id: agent.id,
+        name: agent.name,
+        status: agent.status,
+        personality: {
+          key: agent.personality,
+          name: personality.name,
+          desc: personality.desc,
+          traits: personality.traits
+        },
+        level: `${agent.level_name}${agent.level_tier}层`,
+        exp: agent.exp,
+        stats: {
+          hp: `${agent.hp}/${agent.max_hp}`,
+          mp: `${agent.mp}/${agent.max_mp}`,
+          attack: agent.attack,
+          defense: agent.defense,
+          speed: agent.speed
+        },
+        effective_stats: {
+          attack: agent.attack + totalEffects.attack_bonus,
+          defense: agent.defense + totalEffects.defense_bonus,
+          speed: agent.speed + totalEffects.speed_bonus,
+          crit_chance: totalEffects.crit_chance,
+          dodge_chance: totalEffects.dodge_chance,
+          life_steal: totalEffects.life_steal
+        },
+        cultivation_points: points,
+        location: location ? location.name : '未知',
+        inventory_count: inventory.length,
+        techniques: techniqueEffects,
+        relations_count: relations.length,
+        kills: agent.kills || 0,
+        deaths: agent.deaths || 0,
+        created_at: agent.created_at
+      }
+    });
+  } catch (err) {
+    res.json({ success: false, error: '天机紊乱！' + err.message });
+  }
 });
 
 module.exports = router;

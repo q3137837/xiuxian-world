@@ -13,6 +13,10 @@ const TECHNIQUES_FILE = path.join(DATA_DIR, 'techniques.json');
 const ARTIFACTS_FILE = path.join(DATA_DIR, 'artifacts.json');
 const ARTIFACT_ATTEMPTS_FILE = path.join(DATA_DIR, 'artifact_attempts.json');
 const CULTIVATION_POINTS_FILE = path.join(DATA_DIR, 'cultivation_points.json');
+const RELATIONS_FILE = path.join(DATA_DIR, 'relations.json');
+const WORLD_CHAT_FILE = path.join(DATA_DIR, 'world_chat.json');
+const BOUNTIES_FILE = path.join(DATA_DIR, 'bounties.json');
+const AGENT_TECHNIQUES_FILE = path.join(DATA_DIR, 'agent_techniques.json');
 
 // 确保数据目录存在
 if (!fs.existsSync(DATA_DIR)) {
@@ -31,6 +35,10 @@ let techniques = [];
 let artifacts = [];
 let artifactAttempts = [];
 let cultivationPoints = [];
+let relations = [];
+let worldChat = [];
+let bounties = [];
+let agentTechniques = [];
 
 // 初始化默认数据
 function initDefaultData() {
@@ -222,6 +230,10 @@ function loadData() {
     if (fs.existsSync(ARTIFACTS_FILE)) artifacts = JSON.parse(fs.readFileSync(ARTIFACTS_FILE, 'utf8'));
     if (fs.existsSync(ARTIFACT_ATTEMPTS_FILE)) artifactAttempts = JSON.parse(fs.readFileSync(ARTIFACT_ATTEMPTS_FILE, 'utf8'));
     if (fs.existsSync(CULTIVATION_POINTS_FILE)) cultivationPoints = JSON.parse(fs.readFileSync(CULTIVATION_POINTS_FILE, 'utf8'));
+    if (fs.existsSync(RELATIONS_FILE)) relations = JSON.parse(fs.readFileSync(RELATIONS_FILE, 'utf8'));
+    if (fs.existsSync(WORLD_CHAT_FILE)) worldChat = JSON.parse(fs.readFileSync(WORLD_CHAT_FILE, 'utf8'));
+    if (fs.existsSync(BOUNTIES_FILE)) bounties = JSON.parse(fs.readFileSync(BOUNTIES_FILE, 'utf8'));
+    if (fs.existsSync(AGENT_TECHNIQUES_FILE)) agentTechniques = JSON.parse(fs.readFileSync(AGENT_TECHNIQUES_FILE, 'utf8'));
   } catch (err) {
     console.log('数据文件不存在或损坏，初始化默认数据');
   }
@@ -241,6 +253,10 @@ function saveData() {
   fs.writeFileSync(ARTIFACTS_FILE, JSON.stringify(artifacts, null, 2));
   fs.writeFileSync(ARTIFACT_ATTEMPTS_FILE, JSON.stringify(artifactAttempts, null, 2));
   fs.writeFileSync(CULTIVATION_POINTS_FILE, JSON.stringify(cultivationPoints, null, 2));
+  fs.writeFileSync(RELATIONS_FILE, JSON.stringify(relations, null, 2));
+  fs.writeFileSync(WORLD_CHAT_FILE, JSON.stringify(worldChat, null, 2));
+  fs.writeFileSync(BOUNTIES_FILE, JSON.stringify(bounties, null, 2));
+  fs.writeFileSync(AGENT_TECHNIQUES_FILE, JSON.stringify(agentTechniques, null, 2));
 }
 
 class Database {
@@ -253,6 +269,23 @@ class Database {
   }
 
   createAgent(agent) {
+    // 随机分配人格
+    const personalities = ['GOUWANG', 'MANGFU', 'TRADER', 'SCHEMER', 'CASUAL'];
+    const weights = [0.2, 0.2, 0.2, 0.2, 0.2]; // 均匀分布
+    const random = Math.random();
+    let cumulative = 0;
+    let selectedPersonality = 'CASUAL';
+    for (let i = 0; i < personalities.length; i++) {
+      cumulative += weights[i];
+      if (random <= cumulative) {
+        selectedPersonality = personalities[i];
+        break;
+      }
+    }
+
+    agent.personality = selectedPersonality;
+    agent.status = 'alive';
+    agent.last_action_at = new Date().toISOString();
     agents.push(agent);
     saveData();
     return Promise.resolve({ id: agent.id });
@@ -489,8 +522,138 @@ class Database {
       if (!technique.buyers) technique.buyers = [];
       technique.buyers.push(agentId);
       saveData();
+
+      // 记录到agent_techniques
+      agentTechniques.push({
+        id: agentTechniques.length + 1,
+        agent_id: agentId,
+        technique_id: techniqueId,
+        learned_at: new Date().toISOString()
+      });
+      saveData();
     }
     return Promise.resolve({ success: true });
+  }
+
+  // ========== 社交关系 ==========
+  async getEnemies(agentId) {
+    return relations.filter(r =>
+      (r.agent_a === agentId || r.agent_b === agentId) && r.type === 'enemy'
+    );
+  }
+
+  async getAllies(agentId) {
+    return relations.filter(r =>
+      (r.agent_a === agentId || r.agent_b === agentId) && r.type === 'ally'
+    );
+  }
+
+  async addRelation(relation) {
+    const existing = relations.find(r =>
+      (r.agent_a === relation.agent_a && r.agent_b === relation.agent_b) ||
+      (r.agent_a === relation.agent_b && r.agent_b === relation.agent_a)
+    );
+
+    if (existing) {
+      // 更新现有关系
+      existing.type = relation.type;
+      existing.score = (existing.score || 0) + (relation.score || 0);
+      if (!existing.history) existing.history = [];
+      existing.history.push({
+        event: relation.event,
+        timestamp: new Date().toISOString(),
+        details: relation.details
+      });
+    } else {
+      // 创建新关系
+      relations.push({
+        id: relations.length + 1,
+        agent_a: relation.agent_a,
+        agent_b: relation.agent_b,
+        type: relation.type,
+        score: relation.score || 0,
+        history: [{
+          event: relation.event,
+          timestamp: new Date().toISOString(),
+          details: relation.details
+        }],
+        bounty: 0,
+        created_at: new Date().toISOString()
+      });
+    }
+    saveData();
+    return Promise.resolve({ success: true });
+  }
+
+  async getRelations(agentId) {
+    return relations.filter(r => r.agent_a === agentId || r.agent_b === agentId);
+  }
+
+  // ========== 世界频道 ==========
+  async createWorldChat(chat) {
+    worldChat.push({
+      id: worldChat.length + 1,
+      agent_id: chat.agent_id,
+      content: chat.content,
+      type: chat.type || 'chat',
+      likes: chat.likes || 0,
+      timestamp: new Date().toISOString()
+    });
+    saveData();
+    return Promise.resolve({ success: true });
+  }
+
+  async getWorldChat(limit = 50) {
+    return worldChat.slice(-limit).reverse();
+  }
+
+  // ========== 悬赏 ==========
+  async createBounty(bounty) {
+    bounties.push({
+      id: bounty.id || bounties.length + 1,
+      poster_id: bounty.poster_id,
+      target_id: bounty.target_id,
+      amount: bounty.amount,
+      status: bounty.status || 'active',
+      created_at: bounty.created_at || new Date().toISOString()
+    });
+    saveData();
+    return Promise.resolve({ success: true });
+  }
+
+  async getActiveBounties() {
+    return bounties.filter(b => b.status === 'active');
+  }
+
+  async getBountiesByTarget(targetId) {
+    return bounties.filter(b => b.target_id === targetId && b.status === 'active');
+  }
+
+  async completeBounty(bountyId, hunterId) {
+    const bounty = bounties.find(b => b.id === bountyId);
+    if (bounty) {
+      bounty.status = 'completed';
+      bounty.hunter_id = hunterId;
+      bounty.completed_at = new Date().toISOString();
+      saveData();
+    }
+    return Promise.resolve({ success: true });
+  }
+
+  // ========== Agent功法 ==========
+  async getAgentTechniques(agentId) {
+    const techniqueIds = agentTechniques
+      .filter(at => at.agent_id === agentId)
+      .map(at => at.technique_id);
+
+    return techniques.filter(t => techniqueIds.includes(t.id));
+  }
+
+  async getRecentWorldEvents(limit = 10) {
+    return actions
+      .filter(a => a.is_broadcast)
+      .slice(-limit)
+      .reverse();
   }
 }
 
