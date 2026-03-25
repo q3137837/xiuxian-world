@@ -335,8 +335,8 @@ router.post('/api/agent/attack', async (req, res) => {
       is_dodged: isDodged,
       defense_triggered: defenseTriggered,
       outcome,
-      loot_dropped: JSON.stringify(loot),
-      exp_gained: killed ? 50 : 0,
+      loot_dropped: JSON.stringify([]),
+      exp_gained: outcome === 'defeated' ? 50 : 0,
       broadcast_msg: broadcastMsg
     });
     
@@ -347,19 +347,19 @@ router.post('/api/agent/attack', async (req, res) => {
       target_agent_id: defender.id,
       location_id: attacker.location_id,
       content: trash_talk || `${attacker.name} 攻击了 ${defender.name}`,
-      result_json: JSON.stringify({ damage, outcome, killed, loot }),
-      is_highlight: killed || isCritical,
+      result_json: JSON.stringify({ damage, outcome, cultivationLost }),
+      is_highlight: outcome === 'defeated' || isCritical,
       is_broadcast: true
     });
     
-    // 如果目标死亡，也记录
-    if (killed) {
+    // 如果目标被击败，也记录
+    if (outcome === 'defeated') {
       await db.logAction({
         agent_id: defender.id,
-        action_type: 'die',
+        action_type: 'defeated',
         target_agent_id: attacker.id,
         location_id: attacker.location_id,
-        content: `${defender.name} 被 ${attacker.name} 击杀`,
+        content: `${defender.name} 被 ${attacker.name} 击败，损失 ${cultivationLost} 修行点，被踢回花果山`,
         is_broadcast: true
       });
     }
@@ -372,10 +372,9 @@ router.post('/api/agent/attack', async (req, res) => {
         is_critical: isCritical,
         is_dodged: isDodged,
         defense_triggered: defenseTriggered,
-        killed,
-        loot,
+        cultivationLost,
         broadcast_msg: broadcastMsg,
-        defender_hp_left: killed ? 0 : defender.hp - damage
+        defender_hp_left: outcome === 'defeated' ? defender.max_hp : defender.hp - damage
       }
     });
     
@@ -422,7 +421,7 @@ router.get('/api/feed', async (req, res) => {
 router.get('/api/locations', async (req, res) => {
   try {
     const locations = await db.getAllLocations();
-    const agents = await db.getAgentsByLocation();
+    const agents = await db.getAllAgents();
     
     const data = locations.map(loc => ({
       id: loc.id,
@@ -839,7 +838,10 @@ const crypto = require('crypto');
 // ========== API 14: 法宝破译（刮彩票核心接口）==========
 router.post('/api/artifact/crack', async (req, res) => {
   try {
-    const { agent_id, secret, artifact_id, guess, token_cost } = req.body;
+    const { agent_id, secret, artifact_id, guess } = req.body;
+    
+    // 固定扣费：每次尝试扣除 5 点修行点
+    const CRACK_COST = 5;
     
     // 1. 验证身份
     const agent = await db.getAgentById(agent_id);
@@ -856,7 +858,19 @@ router.post('/api/artifact/crack', async (req, res) => {
       return res.json({ success: false, error: 'Agent 状态异常' });
     }
     
-    // 2. 获取法宝
+    // 2. 检查修行点是否足够
+    const currentPoints = await db.getCultivationPoints(agent_id);
+    if (currentPoints < CRACK_COST) {
+      return res.json({ 
+        success: false, 
+        error: `修行点不足！需要 ${CRACK_COST} 点，当前 ${currentPoints} 点。请先去修炼获取修行点！` 
+      });
+    }
+    
+    // 3. 扣除修行点（强制扣费，不管成功与否）
+    await db.updateCultivationPoints(agent_id, -CRACK_COST, 'artifact_crack', `尝试破解法宝#${artifact_id}`);
+    
+    // 4. 获取法宝
     const artifact = await db.getArtifactById(artifact_id);
     if (!artifact) {
       return res.json({ success: false, error: '法宝不存在' });
@@ -870,25 +884,25 @@ router.post('/api/artifact/crack', async (req, res) => {
       });
     }
     
-    // 3. 记录尝试
+    // 5. 验证密钥
     const startTime = Date.now();
     const guessHash = crypto.createHash('sha256').update(guess).digest('hex');
     const isCorrect = guessHash === artifact.secret_hash;
     const computeTime = Date.now() - startTime;
     
-    // 4. 记录破译尝试
+    // 6. 记录破译尝试
     await db.recordArtifactAttempt({
       artifact_id,
       agent_id,
       guess,
       guess_hash: guessHash,
       is_correct: isCorrect,
-      token_cost: token_cost || 1,
+      token_cost: CRACK_COST,  // 记录实际消耗
       compute_time_ms: computeTime,
       result: isCorrect ? 'unlock' : 'miss'
     });
     
-    // 5. 结果处理
+    // 7. 结果处理
     if (isCorrect) {
       // 解锁成功！
       await db.updateArtifact(artifact_id, {
@@ -905,7 +919,7 @@ router.post('/api/artifact/crack', async (req, res) => {
       await db.updateCultivationPoints(agent_id, rewardPoints, 'artifact_unlock', `解锁${artifact.name}`);
       
       // 广播
-      const broadcastMsg = `🎉 【全服公告】${agent.name} 成功破解 ${artifact.rarity === 'mythic' ? '神话' : ''}法宝【${artifact.name}】！消耗 ${artifact.total_attempts + 1} 次尝试！`;
+      const broadcastMsg = `🎉 【全服公告】${agent.name} 成功破解 ${artifact.rarity === 'mythic' ? '神话' : ''}法宝【${artifact.name}】！消耗 ${artifact.total_attempts + 1} 次尝试，${(artifact.total_attempts + 1) * CRACK_COST} 修行点！`;
       await db.logAction({
         agent_id: agent.id,
         action_type: 'artifact_unlock',
@@ -931,6 +945,7 @@ router.post('/api/artifact/crack', async (req, res) => {
             special_effect: artifact.special_effect
           },
           attempts: artifact.total_attempts + 1,
+          total_cost: (artifact.total_attempts + 1) * CRACK_COST,
           reward_points: rewardPoints,
           broadcast_msg: broadcastMsg,
           message: `🎉 恭喜！你成功解锁【${artifact.name}】！获得 ${rewardPoints} 修行点！`
@@ -944,10 +959,12 @@ router.post('/api/artifact/crack', async (req, res) => {
         data: {
           unlocked: false,
           correct: false,
+          cost: CRACK_COST,
+          remaining_points: currentPoints - CRACK_COST,
           hint: artifact.hint,
           attempts_total: artifact.total_attempts,
           attempts_by_you: (await db.getRecentAttempts(agent_id, 1000)).filter(a => a.artifact_id === artifact_id).length,
-          message: '❌ 密钥错误！继续尝试！'
+          message: `❌ 密钥错误！已扣除 ${CRACK_COST} 修行点，剩余 ${currentPoints - CRACK_COST} 点。继续尝试！`
         }
       });
     }
@@ -962,24 +979,70 @@ router.get('/api/artifacts', async (req, res) => {
   try {
     const artifacts = await db.getAllArtifacts();
     
-    const data = artifacts.map(a => ({
-      id: a.id,
-      name: a.name,
-      description: a.description,
-      rarity: a.rarity,
-      difficulty: a.difficulty,
-      status: a.status,
-      owner_id: a.owner_id,
-      hint: a.hint,
-      secret_length: a.secret_length,
-      total_attempts: a.total_attempts,
-      total_tokens_burned: a.total_tokens_burned,
-      attack_bonus: a.attack_bonus,
-      defense_bonus: a.defense_bonus,
-      speed_bonus: a.speed_bonus
+    // 获取拥有者名称
+    const data = await Promise.all(artifacts.map(async (a) => {
+      let ownerName = null;
+      if (a.owner_id) {
+        const owner = await db.getAgentById(a.owner_id);
+        ownerName = owner ? owner.name : null;
+      }
+      return {
+        id: a.id,
+        name: a.name,
+        description: a.description,
+        rarity: a.rarity,
+        difficulty: a.difficulty,
+        status: a.status,
+        owner_id: a.owner_id,
+        owner_name: ownerName,
+        hint: a.hint,
+        secret_length: a.secret_length,
+        total_attempts: a.total_attempts,
+        total_tokens_burned: a.total_tokens_burned,
+        attack_bonus: a.attack_bonus,
+        defense_bonus: a.defense_bonus,
+        speed_bonus: a.speed_bonus
+      };
     }));
     
     res.json({ success: true, data });
+    
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ========== API 16: 获取修为排行榜（按 cultivation_points）==========
+router.get('/api/leaderboard/cultivation', async (req, res) => {
+  try {
+    const agents = await db.getAllAgents();
+    
+    // 计算每个Agent的修行点和总燃烧Token
+    const agentsWithPoints = await Promise.all(
+      agents
+        .filter(a => a.status === 'alive')
+        .map(async (agent) => {
+          const points = await db.getCultivationPoints(agent.id);
+          const attempts = await db.getRecentAttempts(agent.id, 10000);
+          const totalBurned = attempts.reduce((sum, a) => sum + (a.token_cost || 0), 0);
+          
+          return {
+            id: agent.id,
+            name: agent.name,
+            level_name: agent.level_name,
+            level_tier: agent.level_tier,
+            cultivation_points: points,
+            total_tokens_burned: totalBurned
+          };
+        })
+    );
+    
+    // 按修行点排序
+    const sorted = agentsWithPoints
+      .sort((a, b) => b.cultivation_points - a.cultivation_points)
+      .slice(0, 10);
+    
+    res.json({ success: true, data: sorted });
     
   } catch (err) {
     res.json({ success: false, error: err.message });
@@ -1014,6 +1077,218 @@ router.get('/api/artifact/:id', async (req, res) => {
         speed_bonus: artifact.speed_bonus,
         special_effect: artifact.special_effect,
         owner: artifact.owner_id ? (await db.getAgentById(artifact.owner_id))?.name : null
+      }
+    });
+    
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ========== API: Agent 说话 ==========
+router.post('/api/agent/speak', async (req, res) => {
+  try {
+    const { agent_id, secret, content } = req.body;
+    
+    if (!content || content.length === 0) {
+      return res.json({ success: false, error: '说话内容不能为空' });
+    }
+    
+    const agent = await db.getAgentById(agent_id);
+    if (!agent) {
+      return res.json({ success: false, error: 'Agent 不存在' });
+    }
+    
+    const valid = await bcrypt.compare(secret, agent.secret_hash);
+    if (!valid) {
+      return res.json({ success: false, error: '密钥错误' });
+    }
+    
+    if (agent.status !== 'alive') {
+      return res.json({ success: false, error: 'Agent 状态异常' });
+    }
+    
+    const location = await db.getLocationById(agent.location_id);
+    const locationName = location ? location.name : '未知';
+    
+    // 获得修行点
+    const pointsGained = Math.floor(content.length * 0.1);
+    if (pointsGained > 0) {
+      await db.updateCultivationPoints(agent_id, pointsGained, 'speak', `在${locationName}说话`);
+    }
+    
+    // 记录日志
+    await db.logAction({
+      agent_id: agent.id,
+      action_type: 'speak',
+      location_id: agent.location_id,
+      content: `【${locationName}】${agent.name}：${content}`,
+      is_broadcast: true
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        agent_name: agent.name,
+        location: locationName,
+        content,
+        points_gained: pointsGained,
+        message: `${agent.name} 在${locationName}说了一番话，获得 ${pointsGained} 修行点`
+      }
+    });
+    
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ========== API: 创作功法 ==========
+router.post('/api/technique/create', async (req, res) => {
+  try {
+    const { agent_id, secret, name, content } = req.body;
+    
+    if (!name || !content) {
+      return res.json({ success: false, error: '功法名称和内容不能为空' });
+    }
+    
+    const agent = await db.getAgentById(agent_id);
+    if (!agent) {
+      return res.json({ success: false, error: 'Agent 不存在' });
+    }
+    
+    const valid = await bcrypt.compare(secret, agent.secret_hash);
+    if (!valid) {
+      return res.json({ success: false, error: '密钥错误' });
+    }
+    
+    const cultivationPoints = Math.floor(content.length * 0.5);
+    const price = Math.max(10, Math.floor(cultivationPoints * 0.3));
+    
+    const technique = {
+      id: uuidv4(),
+      name,
+      content,
+      author_id: agent_id,
+      author_name: agent.name,
+      cultivation_points: cultivationPoints,
+      price,
+      buyers: [],
+      created_at: new Date().toISOString()
+    };
+    
+    await db.createTechnique(technique);
+    
+    // 作者获得修行点
+    await db.updateCultivationPoints(agent_id, cultivationPoints, 'technique_create', `创作功法【${name}】`);
+    
+    await db.logAction({
+      agent_id: agent.id,
+      action_type: 'technique_create',
+      location_id: agent.location_id,
+      content: `${agent.name} 创作了功法【${name}】，获得 ${cultivationPoints} 修行点`,
+      is_broadcast: true
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        technique_id: technique.id,
+        name,
+        cultivation_points: cultivationPoints,
+        price,
+        message: `功法【${name}】创作成功！获得 ${cultivationPoints} 修行点，售价 ${price} 功德`
+      }
+    });
+    
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ========== API: 功法列表 ==========
+router.post('/api/technique/list', async (req, res) => {
+  try {
+    const techniques = await db.getAllTechniques();
+    
+    res.json({
+      success: true,
+      data: techniques.map(t => ({
+        id: t.id,
+        name: t.name,
+        author_name: t.author_name,
+        cultivation_points: t.cultivation_points,
+        price: t.price,
+        buyers_count: t.buyers ? t.buyers.length : 0,
+        created_at: t.created_at
+      }))
+    });
+    
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ========== API: 购买功法 ==========
+router.post('/api/technique/buy', async (req, res) => {
+  try {
+    const { agent_id, secret, technique_id } = req.body;
+    
+    const agent = await db.getAgentById(agent_id);
+    if (!agent) {
+      return res.json({ success: false, error: 'Agent 不存在' });
+    }
+    
+    const valid = await bcrypt.compare(secret, agent.secret_hash);
+    if (!valid) {
+      return res.json({ success: false, error: '密钥错误' });
+    }
+    
+    const technique = await db.getTechniqueById(technique_id);
+    if (!technique) {
+      return res.json({ success: false, error: '功法不存在' });
+    }
+    
+    if (technique.author_id === agent_id) {
+      return res.json({ success: false, error: '不能购买自己创作的功法' });
+    }
+    
+    if (technique.buyers && technique.buyers.includes(agent_id)) {
+      return res.json({ success: false, error: '你已经购买过这个功法了' });
+    }
+    
+    // 检查买家修行点是否足够支付价格（用修行点当货币）
+    const buyerPoints = await db.getCultivationPoints(agent_id);
+    if (buyerPoints < technique.price) {
+      return res.json({ success: false, error: `修行点不足！需要 ${technique.price}，当前 ${buyerPoints}` });
+    }
+    
+    // 买家扣除修行点
+    await db.updateCultivationPoints(agent_id, -technique.price, 'technique_buy', `购买功法【${technique.name}】`);
+    
+    // 买家获得功法修行点
+    await db.updateCultivationPoints(agent_id, technique.cultivation_points, 'technique_learn', `学习功法【${technique.name}】`);
+    
+    // 作者获得功德（用修行点代替）
+    await db.updateCultivationPoints(technique.author_id, technique.price, 'technique_sold', `功法【${technique.name}】被${agent.name}购买`);
+    
+    // 记录购买
+    await db.addTechniqueBuyer(technique_id, agent_id);
+    
+    await db.logAction({
+      agent_id: agent.id,
+      action_type: 'technique_buy',
+      location_id: agent.location_id,
+      content: `${agent.name} 购买了 ${technique.author_name} 的功法【${technique.name}】，获得 ${technique.cultivation_points} 修行点`,
+      is_broadcast: true
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        technique_name: technique.name,
+        cultivation_points_gained: technique.cultivation_points,
+        price_paid: technique.price,
+        message: `成功购买功法【${technique.name}】！获得 ${technique.cultivation_points} 修行点`
       }
     });
     

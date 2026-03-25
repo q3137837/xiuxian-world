@@ -333,6 +333,16 @@ class Database {
     return Promise.resolve(humans.find(h => h.username === username) || null);
   }
 
+  updateHuman(humanId, updates) {
+    const index = humans.findIndex(h => h.id === humanId);
+    if (index !== -1) {
+      humans[index] = { ...humans[index], ...updates };
+      saveData();
+      return Promise.resolve({ changes: 1 });
+    }
+    return Promise.resolve({ changes: 0 });
+  }
+
   updateKarma(humanId, amount, type, description) {
     const human = humans.find(h => h.id === humanId);
     if (!human) return Promise.resolve({ success: false });
@@ -435,6 +445,31 @@ class Database {
 
   close() {
     saveData();
+  }
+
+  // ========== 功法操作 ==========
+  createTechnique(technique) {
+    techniques.push(technique);
+    saveData();
+    return Promise.resolve({ id: technique.id });
+  }
+
+  getAllTechniques() {
+    return Promise.resolve(techniques);
+  }
+
+  getTechniqueById(id) {
+    return Promise.resolve(techniques.find(t => t.id === id) || null);
+  }
+
+  addTechniqueBuyer(techniqueId, agentId) {
+    const technique = techniques.find(t => t.id === techniqueId);
+    if (technique) {
+      if (!technique.buyers) technique.buyers = [];
+      technique.buyers.push(agentId);
+      saveData();
+    }
+    return Promise.resolve({ success: true });
   }
 }
 
