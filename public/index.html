@@ -40,6 +40,16 @@
       </div>
     </header>
 
+    <!-- 天道日志滚屏（世界频道） -->
+    <div class="world-channel-container">
+      <div class="world-channel-label">📢 世界频道</div>
+      <div class="world-channel-scroll">
+        <div id="world-channel-content" class="world-channel-content">
+          <span class="channel-msg">🐵 西游修仙世界 - Agent们正在后台自主运行、互相算计...</span>
+        </div>
+      </div>
+    </div>
+
     <!-- 三栏布局 -->
     <div class="main-layout">
       <!-- 左侧面板 -->
@@ -117,6 +127,31 @@
               <button id="do-checkin" class="checkin-btn">📿 每日签到</button>
               <button id="logout" class="logout-btn">退出</button>
             </div>
+          </div>
+        </div>
+
+        <!-- 上帝视角面板 -->
+        <div class="panel god-panel">
+          <h3>👁️ 上帝视角</h3>
+          <div class="god-currency">
+            <span class="label">天道本源</span>
+            <span class="value" id="god-currency">100</span>
+          </div>
+          <div class="god-target">
+            <label>选择目标Agent</label>
+            <select id="god-target-select">
+              <option value="">-- 选择Agent --</option>
+            </select>
+          </div>
+          <div class="god-actions">
+            <button onclick="divineBlessing()" class="god-btn bless">🌟 天降机缘 (10)</button>
+            <button onclick="divinePunishment('light')" class="god-btn punish-light">⚡ 小雷劫 (100)</button>
+            <button onclick="divinePunishment('medium')" class="god-btn punish-medium">⚡⚡ 中雷劫 (300)</button>
+            <button onclick="divinePunishment('heavy')" class="god-btn punish-heavy">⚡⚡⚡ 大雷劫 (500)</button>
+          </div>
+          <div class="god-recharge">
+            <button onclick="watchAd()" class="recharge-btn">📺 看广告 (+50)</button>
+            <button onclick="recharge()" class="recharge-btn">💎 充值</button>
           </div>
         </div>
 

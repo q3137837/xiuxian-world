@@ -258,3 +258,144 @@ body{font-family:var(--font);background:var(--bg);color:var(--txt);min-height:10
 .welcome-banner a{color:var(--accent);text-decoration:underline}
 .banner-close{position:absolute;top:8px;right:12px;background:none;border:none;color:#888;font-size:22px;cursor:pointer;line-height:1}
 .banner-close:hover{color:#fff}
+
+/* ========== World Channel (Marquee) ========== */
+.world-channel-container{
+  background:linear-gradient(90deg,rgba(233,69,96,.1),rgba(0,255,136,.1));
+  border-bottom:1px solid var(--border);
+  padding:8px 20px;
+  display:flex;
+  align-items:center;
+  gap:15px;
+}
+.world-channel-label{
+  color:var(--gold);
+  font-size:.75rem;
+  font-weight:700;
+  white-space:nowrap;
+  text-shadow:0 0 10px rgba(255,215,0,.3);
+}
+.world-channel-scroll{
+  flex:1;
+  overflow:hidden;
+  position:relative;
+}
+.world-channel-content{
+  display:inline-block;
+  white-space:nowrap;
+  animation:marquee 30s linear infinite;
+}
+@keyframes marquee{
+  0%{transform:translateX(100%)}
+  100%{transform:translateX(-100%)}
+}
+.channel-msg{
+  color:var(--txt);
+  font-size:.8rem;
+  margin-right:50px;
+}
+
+/* ========== God Panel ========== */
+.god-panel{
+  background:linear-gradient(135deg,rgba(168,85,247,.1),rgba(0,0,0,.3));
+  border:1px solid var(--purple);
+}
+.god-panel h3{
+  color:var(--purple);
+  text-shadow:0 0 10px rgba(168,85,247,.3);
+}
+.god-currency{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:10px;
+  background:rgba(168,85,247,.1);
+  border-radius:6px;
+  margin-bottom:12px;
+}
+.god-currency .label{
+  color:var(--txt2);
+  font-size:.75rem;
+}
+.god-currency .value{
+  color:var(--gold);
+  font-size:1.5rem;
+  font-weight:700;
+  text-shadow:0 0 10px rgba(255,215,0,.3);
+}
+.god-target{
+  margin-bottom:12px;
+}
+.god-target label{
+  display:block;
+  color:var(--txt2);
+  font-size:.75rem;
+  margin-bottom:5px;
+}
+.god-target select{
+  width:100%;
+  padding:8px;
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:4px;
+  color:var(--txt);
+  font-size:.85rem;
+}
+.god-actions{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin-bottom:12px;
+}
+.god-btn{
+  padding:10px;
+  border:none;
+  border-radius:6px;
+  font-size:.8rem;
+  font-weight:600;
+  cursor:pointer;
+  transition:all .3s;
+}
+.god-btn.bless{
+  background:linear-gradient(135deg,#ffd700,#ffaa00);
+  color:#000;
+}
+.god-btn.bless:hover{
+  transform:translateY(-2px);
+  box-shadow:0 4px 15px rgba(255,215,0,.4);
+}
+.god-btn.punish-light{
+  background:linear-gradient(135deg,#60a5fa,#3b82f6);
+  color:#fff;
+}
+.god-btn.punish-medium{
+  background:linear-gradient(135deg,#a855f7,#7c3aed);
+  color:#fff;
+}
+.god-btn.punish-heavy{
+  background:linear-gradient(135deg,#ef4444,#dc2626);
+  color:#fff;
+}
+.god-btn[class*="punish"]:hover{
+  transform:translateY(-2px);
+  box-shadow:0 4px 15px rgba(239,68,68,.4);
+}
+.god-recharge{
+  display:flex;
+  gap:8px;
+}
+.recharge-btn{
+  flex:1;
+  padding:8px;
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:4px;
+  color:var(--txt);
+  font-size:.75rem;
+  cursor:pointer;
+  transition:all .3s;
+}
+.recharge-btn:hover{
+  background:var(--accent);
+  color:#000;
+}

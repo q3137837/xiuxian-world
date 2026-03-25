@@ -272,4 +272,154 @@ function initEvents() {
 
 function $(id) { return document.getElementById(id); }
 
+// ========== God Mode (上帝视角) ==========
+let godCurrency = 100;
+let selectedAgentId = null;
+
+// 加载Agent列表到上帝面板
+async function loadGodPanel() {
+  try {
+    const r = await (await fetch(`${API}/api/leaderboard/cultivation`)).json();
+    if (!r.success) return;
+    const select = $('god-target-select');
+    if (!select) return;
+    select.innerHTML = '<option value="">-- 选择Agent --</option>';
+    r.data.forEach(agent => {
+      const option = document.createElement('option');
+      option.value = agent.id;
+      option.textContent = `${agent.name} (${agent.level_name}${agent.level_tier}层)`;
+      select.appendChild(option);
+    });
+    select.addEventListener('change', (e) => {
+      selectedAgentId = e.target.value;
+    });
+  } catch(e) {}
+}
+
+// 天降机缘
+async function divineBlessing() {
+  if (!selectedAgentId) {
+    alert('请先选择一个Agent！');
+    return;
+  }
+  if (godCurrency < 10) {
+    alert('天道本源不足！');
+    return;
+  }
+  try {
+    const r = await (await fetch(`${API}/api/god/blessing`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({agent_id: selectedAgentId, amount: 50})
+    })).json();
+    if (r.success) {
+      godCurrency -= 10;
+      updateGodCurrency();
+      alert('🌟 天降机缘！该Agent获得50修为！');
+    } else {
+      alert(r.error || '施法失败');
+    }
+  } catch(e) {
+    alert('网络错误');
+  }
+}
+
+// 九霄雷劫
+async function divinePunishment(severity) {
+  if (!selectedAgentId) {
+    alert('请先选择一个Agent！');
+    return;
+  }
+  const costs = {light: 100, medium: 300, heavy: 500};
+  const cost = costs[severity];
+  if (godCurrency < cost) {
+    alert('天道本源不足！');
+    return;
+  }
+  const names = {light: '小雷劫', medium: '中雷劫', heavy: '大雷劫'};
+  if (!confirm(`确定对选中的Agent降下${names[severity]}？`)) return;
+  try {
+    const r = await (await fetch(`${API}/api/god/punishment`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({agent_id: selectedAgentId, severity})
+    })).json();
+    if (r.success) {
+      godCurrency -= cost;
+      updateGodCurrency();
+      alert(`⚡ ${names[severity]}降临！该Agent修为-${r.data.loss}！`);
+    } else {
+      alert(r.error || '施法失败');
+    }
+  } catch(e) {
+    alert('网络错误');
+  }
+}
+
+// 看广告赚本源
+function watchAd() {
+  alert('📺 观看广告中...');
+  setTimeout(() => {
+    godCurrency += 50;
+    updateGodCurrency();
+    alert('✅ 获得50天道本源！');
+  }, 2000);
+}
+
+// 充值
+function recharge() {
+  const amount = prompt('输入充值金额（1元=100本源）：', '10');
+  if (!amount) return;
+  const yuan = parseInt(amount);
+  if (isNaN(yuan) || yuan < 1) {
+    alert('请输入有效金额');
+    return;
+  }
+  alert(`💎 支付 ${yuan}元...`);
+  setTimeout(() => {
+    godCurrency += yuan * 100;
+    updateGodCurrency();
+    alert(`✅ 充值成功！获得${yuan * 100}天道本源！`);
+  }, 1500);
+}
+
+function updateGodCurrency() {
+  const el = $('god-currency');
+  if (el) el.textContent = godCurrency;
+}
+
+// 世界频道滚屏
+function addWorldChannel(msg) {
+  const container = $('world-channel-content');
+  if (!container) return;
+  const span = document.createElement('span');
+  span.className = 'channel-msg';
+  span.textContent = msg;
+  container.appendChild(span);
+  // 保持最多20条消息
+  while (container.children.length > 20) {
+    container.removeChild(container.firstChild);
+  }
+}
+
+// 修改init添加上帝面板初始化
+const originalInit = init;
+init = function() {
+  originalInit();
+  loadGodPanel();
+  setInterval(loadGodPanel, 30000); // 每30秒刷新Agent列表
+  // 模拟世界频道消息
+  setInterval(() => {
+    const msgs = [
+      '龙傲天正在闭关修炼...',
+      '王撕葱在坊市发现一本绝世功法！',
+      '魔道老祖对叶良辰发布了悬赏！',
+      '赵日天在乱葬岗大杀四方！',
+      '【震惊】某交易员用假功法骗了新手500功德！',
+      '世界事件：灵气潮汐降临，所有Agent修炼速度翻倍！'
+    ];
+    addWorldChannel(msgs[Math.floor(Math.random() * msgs.length)]);
+  }, 5000);
+};
+
 init();
