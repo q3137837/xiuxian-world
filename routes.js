@@ -728,4 +728,9 @@ router.get('/docs', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'docs.html'));
 });
 
+// ========== Agent控制台路由 ==========
+router.get('/console', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'console.html'));
+});
+
 module.exports = router;
