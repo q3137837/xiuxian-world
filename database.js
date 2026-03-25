@@ -27,14 +27,13 @@ let actions = [];
 let battles = [];
 let humans = [];
 let inventories = [];
-let techniques = [];      // 功法表
-let artifacts = [];       // 法宝表
-let artifactAttempts = []; // 破译尝试表
-let cultivationPoints = []; // 修行点流水表
+let techniques = [];
+let artifacts = [];
+let artifactAttempts = [];
+let cultivationPoints = [];
 
 // 初始化默认数据
 function initDefaultData() {
-  // 默认地点
   if (locations.length === 0) {
     locations = [
       { id: 1, name: '花果山', type: 'safezone', description: '新手村，禁止PVP', max_agents: 100, pvp_enabled: false, danger_level: 0 },
@@ -45,7 +44,6 @@ function initDefaultData() {
     ];
   }
 
-  // 初始化50个法宝（倒金字塔分布）
   if (artifacts.length === 0) {
     initArtifacts();
   }
@@ -54,14 +52,36 @@ function initDefaultData() {
 // 初始化50个法宝
 function initArtifacts() {
   const crypto = require('crypto');
-  
-  // 第一梯队：30个福利法宝（3-4位纯数字）
-  for (let i = 1; i <= 30; i++) {
-    const secret = Math.floor(100 + Math.random() * 9000).toString(); // 3-4位数字
+
+  // 第一梯队：30个普通法宝
+  const commonNames = [
+    '定风珠', '紫金铃', '玲珑塔', '金刚琢', '芭蕉扇',
+    '照妖镜', '乾坤袋', '九齿钉耙', '金箍棒(复制品)', '火尖枪',
+    '混天绫', '风火轮', '七星剑', '白玉净瓶', '杨柳枝',
+    '缚妖索', '降魔杵', '辟火罩', '隐身衣', '分光镜',
+    '穿云箭', '凝血珠', '翠玉瓶', '冰魄针', '灵犀角',
+    '碎星锤', '月牙铲', '铁扇公主扇', '避水珠', '通灵石'
+  ];
+  const commonDescs = [
+    '可定八方来风，护体无虞', '铃声一响，摄人心魄', '七宝玲珑，镇妖降魔',
+    '太上老君所炼，无物不破', '一扇生风，二扇生火，三扇下雨', '照见一切妖魔原形',
+    '纳须弥于芥子，空间法宝', '天蓬元帅旧物，威力不凡', '仿制品亦有神通',
+    '三坛海会大神兵器', '灵珠子护身法宝', '哪吒脚踏之宝',
+    '北斗七星之力汇聚', '观音大士法宝', '甘露洒遍三界',
+    '一缚即紧，妖魔难逃', '降妖除魔之法器', '火焰不侵，防护至宝',
+    '穿之隐形，来去无踪', '分光化影，迷惑敌人',
+    '一箭穿云，百步之外', '凝血止伤，疗伤圣品', '翠玉灵瓶，储灵聚气',
+    '冰魄所铸，寒气逼人', '灵犀之角，通灵之宝',
+    '星辰之力凝于锤中', '月华所化，锋利异常', '铁扇公主遗留宝扇',
+    '水火不侵，深海行走', '通灵万物，感知天机'
+  ];
+
+  for (let i = 0; i < 30; i++) {
+    const secret = Math.floor(100 + Math.random() * 9000).toString();
     artifacts.push({
-      id: i,
-      name: `新手法宝${i}号`,
-      description: '新手福利法宝，容易获取',
+      id: i + 1,
+      name: commonNames[i],
+      description: commonDescs[i],
       rarity: 'common',
       difficulty: 1,
       secret_hash: crypto.createHash('sha256').update(secret).digest('hex'),
@@ -78,19 +98,31 @@ function initArtifacts() {
       special_effect: null
     });
   }
-  
-  // 第二梯队：12个进阶法宝（6-8位小写字母+数字）
+
+  // 第二梯队：12个稀有法宝
+  const rareNames = [
+    '如意金箍棒(残片)', '九转还魂丹', '太上老君炉', '东皇钟',
+    '昆仑镜', '炼妖壶', '天机盘', '河图洛书',
+    '混元金斗', '五行旗', '盘古幡', '乾坤圈'
+  ];
+  const rareDescs = [
+    '定海神针残片，仍有神威', '九转大还丹，起死回生', '八卦炉，炼丹至宝',
+    '上古神器，镇压万物', '时空神器，窥探过去未来', '收妖炼妖，化为己用',
+    '推算天机，预知吉凶', '伏羲圣物，演化万象',
+    '金斗一翻，神仙亦堕', '五方五行，阵法至宝', '盘古遗物，开天之幡',
+    '哪吒命宝，乾坤在握'
+  ];
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  for (let i = 31; i <= 42; i++) {
+  for (let i = 0; i < 12; i++) {
     let secret = '';
-    const len = Math.floor(Math.random() * 3) + 6; // 6-8位
+    const len = Math.floor(Math.random() * 3) + 6;
     for (let j = 0; j < len; j++) {
       secret += chars[Math.floor(Math.random() * chars.length)];
     }
     artifacts.push({
-      id: i,
-      name: `进阶法宝${i-30}号`,
-      description: '进阶法宝，需要一定算力',
+      id: 31 + i,
+      name: rareNames[i],
+      description: rareDescs[i],
       rarity: 'rare',
       difficulty: 3,
       secret_hash: crypto.createHash('sha256').update(secret).digest('hex'),
@@ -107,25 +139,35 @@ function initArtifacts() {
       special_effect: null
     });
   }
-  
-  // 第三梯队：7个大佬法宝（10-12位复杂组合+诗词提示）
+
+  // 第三梯队：7个史诗法宝
+  const epicNames = [
+    '如意金箍棒', '定海神针铁', '东皇太一剑', '昊天塔',
+    '玲珑宝塔', '七宝妙树', '斩仙飞刀'
+  ];
+  const epicDescs = [
+    '大圣真正的兵器，如意变化', '定海之铁，重一万三千五百斤',
+    '东皇太一之剑，斩天灭地', '托塔天王镇妖之塔',
+    '七宝所成，光华万丈', '接引道人法宝，万法不侵',
+    '陆压道人绝杀法宝，斩仙灭佛'
+  ];
   const poems = ['床前明月光', '疑是地上霜', '举头望明月', '低头思故乡', '春眠不觉晓', '处处闻啼鸟', '夜来风雨声'];
   const complexChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$';
-  for (let i = 43; i <= 49; i++) {
+  for (let i = 0; i < 7; i++) {
     let secret = '';
-    const len = Math.floor(Math.random() * 3) + 10; // 10-12位
+    const len = Math.floor(Math.random() * 3) + 10;
     for (let j = 0; j < len; j++) {
       secret += complexChars[Math.floor(Math.random() * complexChars.length)];
     }
     artifacts.push({
-      id: i,
-      name: `上古法宝${i-42}号`,
-      description: '上古遗留的强大法宝',
+      id: 43 + i,
+      name: epicNames[i],
+      description: epicDescs[i],
       rarity: 'epic',
       difficulty: 7,
       secret_hash: crypto.createHash('sha256').update(secret).digest('hex'),
       secret_length: secret.length,
-      hint: `提示：${poems[i-43]}（${secret.length}位复杂组合）`,
+      hint: `提示：${poems[i]}（${secret.length}位复杂组合）`,
       status: 'locked',
       owner_id: null,
       unlocked_at: null,
@@ -137,8 +179,8 @@ function initArtifacts() {
       special_effect: '{"crit_chance": 0.1}'
     });
   }
-  
-  // 第四梯队：1个神话法宝（16位动态盐值）
+
+  // 第四梯队：1个神话法宝
   let mythSecret = '';
   for (let i = 0; i < 16; i++) {
     mythSecret += complexChars[Math.floor(Math.random() * complexChars.length)];
@@ -146,7 +188,7 @@ function initArtifacts() {
   artifacts.push({
     id: 50,
     name: '盘古开天斧',
-    description: '上古神器，全服唯一',
+    description: '上古神器，全服唯一，开天辟地之力',
     rarity: 'mythic',
     difficulty: 10,
     secret_hash: crypto.createHash('sha256').update(mythSecret).digest('hex'),
@@ -162,7 +204,7 @@ function initArtifacts() {
     speed_bonus: 30,
     special_effect: '{"god_mode": true, "crit_chance": 0.3}'
   });
-  
+
   console.log(`✅ 初始化 ${artifacts.length} 个法宝完成`);
 }
 
@@ -210,7 +252,6 @@ class Database {
     return Promise.resolve();
   }
 
-  // ========== Agent 操作 ==========
   createAgent(agent) {
     agents.push(agent);
     saveData();
@@ -239,7 +280,6 @@ class Database {
     return Promise.resolve({ changes: 0 });
   }
 
-  // ========== 地点操作 ==========
   getLocationById(id) {
     return Promise.resolve(locations.find(l => l.id === id) || null);
   }
@@ -248,7 +288,6 @@ class Database {
     return Promise.resolve(locations);
   }
 
-  // ========== 物品操作 ==========
   getItemById(id) {
     return Promise.resolve(items.find(i => i.id === id) || null);
   }
@@ -257,7 +296,6 @@ class Database {
     return Promise.resolve(items);
   }
 
-  // ========== 背包操作 ==========
   addToInventory(agentId, itemId, quantity = 1) {
     const existing = inventories.find(i => i.agent_id === agentId && i.item_id === itemId);
     if (existing) {
@@ -268,7 +306,7 @@ class Database {
         agent_id: agentId,
         item_id: itemId,
         quantity,
-        equipped: false,
+        equipped: true,
         acquired_at: new Date().toISOString()
       });
     }
@@ -280,7 +318,6 @@ class Database {
     return Promise.resolve(inventories.filter(i => i.agent_id === agentId));
   }
 
-  // ========== 日志操作 ==========
   logAction(action) {
     const newAction = {
       id: actions.length + 1,
@@ -300,7 +337,6 @@ class Database {
     return Promise.resolve(result.slice(-limit).reverse());
   }
 
-  // ========== 战斗记录 ==========
   recordBattle(battle) {
     const newBattle = {
       id: battles.length + 1,
@@ -312,11 +348,10 @@ class Database {
     return Promise.resolve({ id: newBattle.id });
   }
 
-  // ========== 人类/功德系统 ==========
   createHuman(human) {
     humans.push({
       ...human,
-      karma_points: 100,  // 注册送100功德
+      karma_points: 100,
       total_earned: 100,
       total_spent: 0,
       created_at: new Date().toISOString()
@@ -346,7 +381,6 @@ class Database {
   updateKarma(humanId, amount, type, description) {
     const human = humans.find(h => h.id === humanId);
     if (!human) return Promise.resolve({ success: false });
-    
     human.karma_points += amount;
     if (amount > 0) {
       human.total_earned += amount;
@@ -365,19 +399,13 @@ class Database {
     return Promise.resolve(battles);
   }
 
-  // ========== 修行点操作 ==========
   async getCultivationPoints(agentId) {
-    const agent = agents.find(a => a.id === agentId);
-    if (!agent) return 0;
-    
-    // 计算总修行点：基础 + 所有功法提供的
     const logs = cultivationPoints.filter(cp => cp.agent_id === agentId);
     return logs.reduce((sum, cp) => sum + cp.points, 0);
   }
 
   async updateCultivationPoints(agentId, points, type, description) {
     const currentBalance = await this.getCultivationPoints(agentId);
-    
     cultivationPoints.push({
       id: cultivationPoints.length + 1,
       agent_id: agentId,
@@ -387,12 +415,10 @@ class Database {
       balance_after: currentBalance + points,
       created_at: new Date().toISOString()
     });
-    
     saveData();
     return Promise.resolve({ success: true, newBalance: currentBalance + points });
   }
 
-  // ========== 法宝操作 ==========
   getArtifactById(id) {
     return Promise.resolve(artifacts.find(a => a.id === id) || null);
   }
@@ -415,21 +441,17 @@ class Database {
     return Promise.resolve({ success: false });
   }
 
-  // ========== 破译尝试操作 ==========
   async recordArtifactAttempt(attempt) {
     artifactAttempts.push({
       id: artifactAttempts.length + 1,
       ...attempt,
       created_at: new Date().toISOString()
     });
-    
-    // 更新法宝统计
     const artifact = artifacts.find(a => a.id === attempt.artifact_id);
     if (artifact) {
       artifact.total_attempts++;
       artifact.total_tokens_burned += attempt.token_cost || 0;
     }
-    
     saveData();
     return Promise.resolve({ id: artifactAttempts.length });
   }
@@ -447,7 +469,6 @@ class Database {
     saveData();
   }
 
-  // ========== 功法操作 ==========
   createTechnique(technique) {
     techniques.push(technique);
     saveData();

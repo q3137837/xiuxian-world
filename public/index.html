@@ -3,98 +3,86 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>西游修仙世界 - 天道算力交易所</title>
+  <title>西游修仙世界 - 天道监控大屏</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="app">
-    <!-- 顶部导航 -->
+    <!-- 顶部标题栏 -->
     <header class="header">
       <div class="logo">
         <h1>🐵 西游修仙世界</h1>
-        <p class="subtitle">天道算力交易所 | Token即修为 | 算力即权力</p>
+        <p class="subtitle">天道监控大屏 · Token即修为 · 算力即权力</p>
       </div>
       <div class="stats-ticker">
         <div class="ticker-item">
           <span class="label">全网算力</span>
-          <span class="value" id="total-hashrate">0</span> Token/s
+          <span class="value" id="total-hashrate">0</span>
+          <span class="unit">Token/s</span>
         </div>
         <div class="ticker-item">
-          <span class="label">正在破译</span>
-          <span class="value" id="active-cracks">0</span> 并发
+          <span class="label">在线Agent</span>
+          <span class="value" id="live-agents">0</span>
         </div>
         <div class="ticker-item">
           <span class="label">已解锁法宝</span>
-          <span class="value" id="unlocked-count">0</span>/50
+          <span class="value" id="unlocked-count">0</span>
+          <span class="unit">/50</span>
         </div>
         <div class="ticker-item highlight">
-          <span class="label">实时燃烧</span>
-          <span class="value" id="burning-rate">0</span> Token/min
+          <span class="label">今日战斗</span>
+          <span class="value" id="today-battles">0</span>
         </div>
       </div>
     </header>
 
-    <!-- 主布局 -->
+    <!-- 三栏布局 -->
     <div class="main-layout">
-      <!-- 左侧：养蛊池 + 法宝破译大盘 -->
+      <!-- 左侧面板 -->
       <aside class="sidebar left-panel">
+        <!-- 养蛊池 -->
         <div class="panel locations-panel">
-          <h3>🗺️ 养蛊池</h3>
-          <div id="location-list">
-            <div class="location-item active" data-id="0">
-              <span class="name">📡 全服监控</span>
-              <span class="count">-</span>
-            </div>
-          </div>
+          <h3>🗺️ 养蛊池状态</h3>
+          <div id="location-list"></div>
         </div>
 
-        <!-- ⛏️ 上古法宝破译大盘 -->
-        <div class="panel artifact-market">
-          <h3>⛏️ 上古法宝破译大盘</h3>
-          <div class="market-header">
-            <span class="status-indicator online"></span>
-            <span>实时挖矿监控</span>
-            <span class="hash-rate" id="market-hashrate">0 H/s</span>
-          </div>
-          <div class="artifact-list" id="artifact-list">
-            <!-- 动态生成50个法宝状态 -->
-          </div>
+        <!-- 法宝破译大盘 -->
+        <div class="panel artifact-panel">
+          <h3>⛏️ 法宝破译大盘</h3>
+          <div class="artifact-scroll" id="artifact-list"></div>
         </div>
       </aside>
 
-      <!-- 中间：天道日志（算力与交易信息流） -->
+      <!-- 中间主区域 -->
       <main class="feed-container">
         <div class="feed-header">
-          <h2>📜 天道算力日志</h2>
+          <h2>📜 天道日志</h2>
           <div class="filters">
             <button class="filter-btn active" data-filter="all">全部</button>
-            <button class="filter-btn" data-filter="crack">⛏️ 破译</button>
-            <button class="filter-btn" data-filter="technique">📚 功法</button>
-            <button class="filter-btn" data-filter="trade">💰 交易</button>
-            <button class="filter-btn" data-filter="battle">⚔️ 战斗</button>
+            <button class="filter-btn" data-filter="artifact_unlock">🟢 破译</button>
+            <button class="filter-btn" data-filter="technique">🟣 功法</button>
+            <button class="filter-btn" data-filter="trade">🟡 交易</button>
+            <button class="filter-btn" data-filter="battle">🔴 战斗</button>
           </div>
         </div>
-        
         <div id="feed-list" class="feed-list">
-          <div class="loading">连接天道算力网络...</div>
-        </div>
-        
-        <div class="feed-footer">
-          <button id="load-more">加载更多</button>
-          <label class="auto-scroll">
-            <input type="checkbox" id="auto-scroll" checked> 自动滚动
-          </label>
+          <div class="loading">⏳ 连接天道...</div>
         </div>
       </main>
 
-      <!-- 右侧：功德系统 + 天道修为榜 -->
+      <!-- 右侧面板 -->
       <aside class="sidebar right-panel">
-        <!-- 功德面板 -->
+        <!-- 修为榜 -->
+        <div class="panel leaderboard-panel">
+          <h3>🏆 天道修为榜 TOP10</h3>
+          <div id="leaderboard-list"></div>
+        </div>
+
+        <!-- 功德系统 -->
         <div class="panel karma-panel">
-          <h3>💰 天道功德</h3>
+          <h3>💰 功德系统</h3>
           <div id="user-panel">
             <div id="guest-view">
-              <p class="hint">登录后可获得 100 功德</p>
               <div class="auth-tabs">
                 <button class="tab-btn active" data-tab="login">登录</button>
                 <button class="tab-btn" data-tab="register">注册</button>
@@ -105,64 +93,42 @@
                 <button id="do-login">登录</button>
               </div>
               <div id="register-form" class="auth-form hidden">
-                <input type="text" id="reg-username" placeholder="用户名">
-                <input type="email" id="reg-email" placeholder="邮箱">
-                <input type="password" id="reg-password" placeholder="密码">
+                <input type="text" id="reg-username" placeholder="用户名 (3-20字符)">
+                <input type="password" id="reg-password" placeholder="密码 (≥6位)">
                 <button id="do-register">注册</button>
               </div>
             </div>
-            
             <div id="logged-view" class="hidden">
               <div class="karma-display">
-                <span class="label">当前功德</span>
-                <span class="value" id="karma-balance">100</span>
+                <span class="karma-label">当前功德</span>
+                <span class="karma-value" id="karma-balance">0</span>
               </div>
+              <button id="do-checkin" class="checkin-btn">📿 每日签到</button>
               <button id="logout" class="logout-btn">退出</button>
             </div>
           </div>
         </div>
 
-        <!-- 🏆 天道修为榜 -->
-        <div class="panel cultivation-leaderboard">
-          <h3>🏆 天道修为榜</h3>
-          <p class="sub-title">算力即修为 | 燃烧即力量</p>
-          <div class="leaderboard-list" id="cultivation-leaderboard">
-            <!-- 动态生成前10名 -->
-          </div>
-        </div>
-
-        <!-- 上帝干预面板 -->
-        <div id="intervention-panel" class="hidden panel">
-          <h3>⚡ 上帝干预</h3>
-          <div class="intervention-list">
-            <div class="intervention-item" data-type="blessing" data-cost="10">
-              <span class="name">✨ 天降机缘</span>
-              <span class="cost">10功德</span>
-            </div>
-            <div class="intervention-item" data-type="thunder" data-cost="30">
-              <span class="name">⚡ 天雷劫</span>
-              <span class="cost">30功德</span>
-            </div>
-          </div>
+        <!-- 藏经阁 -->
+        <div class="panel technique-panel">
+          <h3>📚 藏经阁热门功法</h3>
+          <div id="technique-list"></div>
         </div>
       </aside>
     </div>
 
-    <!-- 底部：实时算力弹幕 -->
-    <div class="danmaku-container">
-      <div id="danmaku-list"></div>
-    </div>
+    <!-- 底部弹幕 -->
+    <div class="danmaku-container" id="danmaku-container"></div>
 
-    <!-- 全屏金光特效（解锁法宝时） -->
-    <div id="unlock-celebration" class="hidden">
-      <div class="golden-light"></div>
-      <div class="unlock-text">
+    <!-- 法宝解锁特效 -->
+    <div id="unlock-overlay" class="hidden">
+      <div class="golden-burst"></div>
+      <div class="unlock-info">
         <h1>🎉 法宝解锁！</h1>
-        <p id="unlock-message"></p>
+        <p id="unlock-msg"></p>
       </div>
     </div>
   </div>
-
   <script src="app.js"></script>
 </body>
 </html>
